@@ -1,5 +1,7 @@
 import { defaultFillerTasks } from "../data/fillerTasks";
 import type {
+  AchievementId,
+  AchievementProgress,
   AppState,
   BackupFile,
   BingoMode,
@@ -12,21 +14,26 @@ import type {
   UserStats,
   UserTask,
 } from "../types";
+import { achievementDefinitions, createInitialAchievements, createInitialUnlocks } from "./achievements";
+import { daubers, themes } from "./cosmetics";
 import { targetPatterns } from "./patterns";
 
-export const STORAGE_KEY = "productivity-bingo-state-v3";
-const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v2", "productivity-bingo-state-v1"];
+export const STORAGE_KEY = "productivity-bingo-state-v4";
+const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
 const patternIds = targetPatterns.map((pattern) => pattern.id);
 
 export function createInitialState(): AppState {
   return {
-    version: 3,
+    version: 4,
     tasks: [],
     rewards: [],
     fillerTasks: defaultFillerTasks.map((task) => ({ ...task })),
     board: null,
     stats: { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
     streak: { current: 0, best: 0, lastCompletedDate: null },
+    settings: { selectedTheme: "simple", selectedDauber: "x" },
+    unlocks: createInitialUnlocks(),
+    achievements: createInitialAchievements(),
   };
 }
 
@@ -101,6 +108,25 @@ function isValidStreak(value: unknown): value is StreakState {
     value.current <= value.best && (value.lastCompletedDate === null || isDateKey(value.lastCompletedDate));
 }
 
+function isValidCosmetics(value: Record<string, unknown>): boolean {
+  if (!isRecord(value.settings) || !isRecord(value.unlocks) || !isRecord(value.achievements)) return false;
+  const achievements = value.achievements;
+  const themeIds = themes.map((theme) => theme.id);
+  const dauberIds = daubers.map((dauber) => dauber.id);
+  if (!Array.isArray(value.unlocks.themes) || !value.unlocks.themes.every((id) => themeIds.includes(id)) ||
+    !Array.isArray(value.unlocks.daubers) || !value.unlocks.daubers.every((id) => dauberIds.includes(id)) ||
+    typeof value.settings.selectedTheme !== "string" ||
+    !value.unlocks.themes.includes(value.settings.selectedTheme) ||
+    typeof value.settings.selectedDauber !== "string" ||
+    !value.unlocks.daubers.includes(value.settings.selectedDauber)) return false;
+
+  return achievementDefinitions.every((definition) => {
+    const progress = achievements[definition.id];
+    return isRecord(progress) && typeof progress.unlocked === "boolean" &&
+      (progress.unlockedAt === null || typeof progress.unlockedAt === "string");
+  });
+}
+
 function hasValidCollections(value: Record<string, unknown>): boolean {
   return Array.isArray(value.tasks) && value.tasks.every(isValidTask) &&
     Array.isArray(value.rewards) && value.rewards.every(isValidReward) &&
@@ -108,8 +134,9 @@ function hasValidCollections(value: Record<string, unknown>): boolean {
 }
 
 function isValidState(value: unknown): value is AppState {
-  return isRecord(value) && value.version === 3 && hasValidCollections(value) &&
-    isValidBoard(value.board) && isValidStats(value.stats) && isValidStreak(value.streak);
+  return isRecord(value) && value.version === 4 && hasValidCollections(value) &&
+    isValidBoard(value.board) && isValidStats(value.stats) && isValidStreak(value.streak) &&
+    isValidCosmetics(value);
 }
 
 function migrateBoard(value: unknown, version: 1 | 2): BoardState | null | undefined {
@@ -153,17 +180,23 @@ function migrateState(raw: string | null): AppState | null {
   try {
     const value: unknown = JSON.parse(raw);
     if (isValidState(value)) return value;
-    if (!isRecord(value) || (value.version !== 1 && value.version !== 2) || !hasValidCollections(value)) return null;
-    const board = migrateBoard(value.board, value.version);
-    if (board === undefined) return null;
+    if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
+      !hasValidCollections(value)) return null;
+    const board = value.version === 3
+      ? (isValidBoard(value.board) ? value.board : undefined)
+      : migrateBoard(value.board, value.version);
+    if (board === undefined || (value.version === 3 && (!isValidStats(value.stats) || !isValidStreak(value.streak)))) return null;
     return {
-      version: 3,
+      version: 4,
       tasks: value.tasks as UserTask[],
       rewards: value.rewards as Reward[],
       fillerTasks: value.fillerTasks as FillerTask[],
       board,
-      stats: { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
-      streak: { current: 0, best: 0, lastCompletedDate: null },
+      stats: value.version === 3 ? value.stats as UserStats : { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
+      streak: value.version === 3 ? value.streak as StreakState : { current: 0, best: 0, lastCompletedDate: null },
+      settings: { selectedTheme: "simple", selectedDauber: "x" },
+      unlocks: createInitialUnlocks(),
+      achievements: createInitialAchievements(),
     };
   } catch {
     return null;
@@ -196,7 +229,7 @@ export function saveState(state: AppState): void {
 }
 
 export function createBackup(state: AppState, exportedAt = new Date().toISOString()): BackupFile {
-  return { app: "productivity-bingo", schemaVersion: 3, exportedAt, data: state };
+  return { app: "productivity-bingo", schemaVersion: 4, exportedAt, data: state };
 }
 
 export function parseBackup(raw: string): AppState {
@@ -209,11 +242,13 @@ export function parseBackup(raw: string): AppState {
   if (!isRecord(value) || value.app !== "productivity-bingo") {
     throw new Error("That file is not a Productivity Bingo backup.");
   }
-  if (value.schemaVersion !== 3) {
+  if (value.schemaVersion !== 3 && value.schemaVersion !== 4) {
     throw new Error("This backup uses an unsupported schema version.");
   }
-  if (typeof value.exportedAt !== "string" || !isValidState(value.data)) {
+  if (typeof value.exportedAt !== "string") {
     throw new Error("The backup is incomplete or contains invalid data.");
   }
-  return value.data;
+  const state = migrateState(JSON.stringify(value.data));
+  if (!state) throw new Error("The backup is incomplete or contains invalid data.");
+  return state;
 }

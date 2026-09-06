@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { BingoBoard } from "./components/BingoBoard";
+import { AppearanceManager } from "./components/AppearanceManager";
 import { DataManager } from "./components/DataManager";
 import { FillerManager } from "./components/FillerManager";
 import { ModeSelector } from "./components/ModeSelector";
 import { RewardManager } from "./components/RewardManager";
 import { TaskManager } from "./components/TaskManager";
 import { generateBoard } from "./lib/board";
+import { evaluateAchievements, type AchievementDefinition } from "./lib/achievements";
 import { createId } from "./lib/id";
 import { detectTargetPatterns, getTargetPattern, pickRandomTarget } from "./lib/patterns";
 import { normalizeStreak, recordBingoDay, recordBingoStats } from "./lib/progress";
 import { loadState, saveState } from "./lib/storage";
 import type { AppState, BingoMode, PatternId, Reward, UserTask } from "./types";
 
-type Panel = "tasks" | "rewards" | "fillers" | "data";
+type Panel = "tasks" | "rewards" | "fillers" | "appearance" | "data";
 
 export default function App() {
   const [state, setState] = useState<AppState>(() => {
@@ -21,12 +23,40 @@ export default function App() {
   });
   const [activePanel, setActivePanel] = useState<Panel>("tasks");
   const [message, setMessage] = useState("");
+  const [achievementToast, setAchievementToast] = useState<{
+    achievement: AchievementDefinition;
+    additional: number;
+  } | null>(null);
   const [selectedMode, setSelectedMode] = useState<BingoMode>(state.board?.mode ?? "choose");
   const [selectedTarget, setSelectedTarget] = useState<PatternId>(state.board?.targetPattern ?? "standard-line");
 
   useEffect(() => {
     saveState(state);
   }, [state]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = state.settings.selectedTheme;
+  }, [state.settings.selectedTheme]);
+
+  useEffect(() => {
+    const result = evaluateAchievements(state);
+    if (result.newlyUnlocked.length === 0) return;
+    setState((current) => ({
+      ...current,
+      achievements: result.achievements,
+      unlocks: result.unlocks,
+    }));
+    setAchievementToast({
+      achievement: result.newlyUnlocked[0],
+      additional: result.newlyUnlocked.length - 1,
+    });
+  }, [state.stats, state.streak]);
+
+  useEffect(() => {
+    if (!achievementToast) return;
+    const timeout = window.setTimeout(() => setAchievementToast(null), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [achievementToast]);
 
   const completedCount = state.board?.squares.filter((square) => square.completed).length ?? 0;
   const visibleStreak = normalizeStreak(state.streak);
@@ -166,12 +196,16 @@ export default function App() {
                 <br />
                 {state.board.awardedReward
                   ? <>Your reward: <strong>{state.board.awardedReward.text}</strong></>
-                  : "No enabled rewards yet—add one for your next board."}
+                  : "No rewards enabled yet! Add one for your next board."}
               </div>
             </div>
           )}
           {message && <p className="notice" role="status">{message}</p>}
-          <BingoBoard board={state.board} onToggleSquare={toggleSquare} />
+          <BingoBoard
+            board={state.board}
+            onToggleSquare={toggleSquare}
+            dauber={state.settings.selectedDauber}
+          />
         </section>
 
         <section className="manage-area" aria-label="Manage bingo content">
@@ -186,7 +220,7 @@ export default function App() {
             {state.board && <p className="next-board-note">Changes apply to your next board.</p>}
           </div>
           <nav className="panel-tabs" aria-label="Content managers">
-            {(["tasks", "rewards", "fillers", "data"] as Panel[]).map((panel) => (
+            {(["tasks", "rewards", "fillers", "appearance", "data"] as Panel[]).map((panel) => (
               <button
                 type="button"
                 key={panel}
@@ -194,7 +228,7 @@ export default function App() {
                 aria-pressed={activePanel === panel}
                 onClick={() => setActivePanel(panel)}
               >
-                {panel === "fillers" ? "Fillers" : panel[0].toUpperCase() + panel.slice(1)}
+                {panel === "appearance" ? "Look" : panel[0].toUpperCase() + panel.slice(1)}
               </button>
             ))}
           </nav>
@@ -228,9 +262,34 @@ export default function App() {
               />
             )}
             {activePanel === "data" && <DataManager state={state} onImport={importState} />}
+            {activePanel === "appearance" && (
+              <AppearanceManager
+                state={state}
+                onThemeChange={(selectedTheme) => setState((current) => ({
+                  ...current,
+                  settings: { ...current.settings, selectedTheme },
+                }))}
+                onDauberChange={(selectedDauber) => setState((current) => ({
+                  ...current,
+                  settings: { ...current.settings, selectedDauber },
+                }))}
+              />
+            )}
           </div>
         </section>
       </main>
+      {achievementToast && (
+        <div className="achievement-toast" role="status">
+          <span aria-hidden="true">✦</span>
+          <div>
+            <strong>Achievement unlocked: {achievementToast.achievement.label}</strong>
+            <p>{achievementToast.achievement.reward.label} is now available
+              {achievementToast.additional > 0 ? ` · plus ${achievementToast.additional} more unlock${achievementToast.additional === 1 ? "" : "s"}` : ""}
+            </p>
+          </div>
+          <button type="button" aria-label="Dismiss achievement" onClick={() => setAchievementToast(null)}>×</button>
+        </div>
+      )}
       <footer>Saved automatically in this browser.</footer>
     </div>
   );

@@ -66,19 +66,52 @@ export type StreakState = {
   lastCompletedDate: string | null;
 };
 
+export type ThemeId = "simple" | "dark" | "cozy" | "candy" | "terminal" | "space";
+export type DauberId = "x" | "circle" | "star" | "heart" | "cat" | "ghost" | "rainbow";
+
+export type AchievementId =
+  | "first-bingo"
+  | "first-blackout"
+  | "squares-25"
+  | "squares-100"
+  | "squares-500"
+  | "streak-3"
+  | "streak-5"
+  | "streak-10"
+  | "bingos-10"
+  | "all-patterns";
+
+export type AchievementProgress = {
+  unlocked: boolean;
+  unlockedAt: string | null;
+};
+
+export type UnlockState = {
+  themes: ThemeId[];
+  daubers: DauberId[];
+};
+
+export type AppearanceSettings = {
+  selectedTheme: ThemeId;
+  selectedDauber: DauberId;
+};
+
 export type AppState = {
-  version: 3;
+  version: 4;
   tasks: UserTask[];
   rewards: Reward[];
   fillerTasks: FillerTask[];
   board: BoardState | null;
   stats: UserStats;
   streak: StreakState;
+  settings: AppearanceSettings;
+  unlocks: UnlockState;
+  achievements: Record<AchievementId, AchievementProgress>;
 };
 
 export type BackupFile = {
   app: "productivity-bingo";
-  schemaVersion: 3;
+  schemaVersion: 4;
   exportedAt: string;
   data: AppState;
 };

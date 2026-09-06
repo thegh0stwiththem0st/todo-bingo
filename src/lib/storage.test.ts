@@ -9,7 +9,7 @@ describe("stored state", () => {
 
   it("rejects malformed and unsupported state", () => {
     expect(parseStoredState("not json")).toBeNull();
-    expect(parseStoredState(JSON.stringify({ version: 2 }))).toBeNull();
+    expect(parseStoredState(JSON.stringify({ version: 3 }))).toBeNull();
   });
 });
 
@@ -21,16 +21,38 @@ describe("backup validation", () => {
   });
 
   it("rejects the wrong app and schema", () => {
-    expect(() => parseBackup(JSON.stringify({ app: "other", schemaVersion: 3 }))).toThrow(/not a Productivity Bingo/);
+    expect(() => parseBackup(JSON.stringify({ app: "other", schemaVersion: 4 }))).toThrow(/not a Productivity Bingo/);
     expect(() => parseBackup(JSON.stringify({ app: "productivity-bingo", schemaVersion: 2 }))).toThrow(/unsupported/);
   });
 
   it("rejects malformed state even with the right envelope", () => {
     expect(() => parseBackup(JSON.stringify({
       app: "productivity-bingo",
+      schemaVersion: 4,
+      exportedAt: "2026-09-06T12:00:00.000Z",
+      data: { version: 4 },
+    }))).toThrow(/invalid data/);
+  });
+
+  it("migrates a valid schema 3 backup", () => {
+    const current = createInitialState();
+    const legacyData = {
+      version: 3,
+      tasks: current.tasks,
+      rewards: current.rewards,
+      fillerTasks: current.fillerTasks,
+      board: current.board,
+      stats: { completedSquares: 25, totalBingos: 1, completedPatterns: { "standard-line": 1 } },
+      streak: { current: 1, best: 1, lastCompletedDate: "2026-09-06" },
+    };
+    const imported = parseBackup(JSON.stringify({
+      app: "productivity-bingo",
       schemaVersion: 3,
       exportedAt: "2026-09-06T12:00:00.000Z",
-      data: { version: 3 },
-    }))).toThrow(/invalid data/);
+      data: legacyData,
+    }));
+    expect(imported.version).toBe(4);
+    expect(imported.stats.completedSquares).toBe(25);
+    expect(imported.unlocks.themes).toContain("dark");
   });
 });

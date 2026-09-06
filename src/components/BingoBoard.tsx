@@ -1,12 +1,15 @@
 import type { BoardState } from "../types";
+import type { DauberId } from "../types";
+import { dauberSymbols } from "../lib/cosmetics";
 import { getWinningIndexes } from "../lib/patterns";
 
 type BingoBoardProps = {
   board: BoardState | null;
   onToggleSquare: (index: number) => void;
+  dauber: DauberId;
 };
 
-export function BingoBoard({ board, onToggleSquare }: BingoBoardProps) {
+export function BingoBoard({ board, onToggleSquare, dauber }: BingoBoardProps) {
   const winningIndexes = getWinningIndexes(board?.completedPatterns ?? []);
 
   if (!board) {
@@ -34,7 +37,9 @@ export function BingoBoard({ board, onToggleSquare }: BingoBoardProps) {
           onClick={() => onToggleSquare(index)}
         >
           <span className="square-text">{square.text}</span>
-          {square.completed && <span className="completion-mark" aria-hidden="true">×</span>}
+          {square.completed && (
+            <span className={`completion-mark dauber-${dauber}`} aria-hidden="true">{dauberSymbols[dauber]}</span>
+          )}
         </button>
       ))}
     </div>
