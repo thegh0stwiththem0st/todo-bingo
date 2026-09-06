@@ -51,8 +51,26 @@ describe("backup validation", () => {
       exportedAt: "2026-09-06T12:00:00.000Z",
       data: legacyData,
     }));
-    expect(imported.version).toBe(4);
+    expect(imported.version).toBe(5);
     expect(imported.stats.completedSquares).toBe(25);
     expect(imported.unlocks.themes).toContain("dark");
+  });
+
+  it("migrates schema 4 rewards to the medium tier", () => {
+    const current = createInitialState();
+    const legacyData = {
+      ...current,
+      version: 4,
+      rewards: [{ id: "reward-1", text: "Take a break", enabled: true, createdAt: "2026-09-06" }],
+    };
+    const imported = parseBackup(JSON.stringify({
+      app: "productivity-bingo",
+      schemaVersion: 4,
+      exportedAt: "2026-09-06T12:00:00.000Z",
+      data: legacyData,
+    }));
+    expect(imported.version).toBe(5);
+    expect(imported.rewards[0].tier).toBe("medium");
+    expect(imported.settings).toEqual(current.settings);
   });
 });

@@ -1,7 +1,5 @@
 import { defaultFillerTasks } from "../data/fillerTasks";
 import type {
-  AchievementId,
-  AchievementProgress,
   AppState,
   BackupFile,
   BingoMode,
@@ -18,13 +16,13 @@ import { achievementDefinitions, createInitialAchievements, createInitialUnlocks
 import { daubers, themes } from "./cosmetics";
 import { targetPatterns } from "./patterns";
 
-export const STORAGE_KEY = "productivity-bingo-state-v4";
-const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
+export const STORAGE_KEY = "productivity-bingo-state-v5";
+const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
 const patternIds = targetPatterns.map((pattern) => pattern.id);
 
 export function createInitialState(): AppState {
   return {
-    version: 4,
+    version: 5,
     tasks: [],
     rewards: [],
     fillerTasks: defaultFillerTasks.map((task) => ({ ...task })),
@@ -50,9 +48,17 @@ function isValidTask(value: unknown): value is UserTask {
     typeof value.active === "boolean" && typeof value.createdAt === "string";
 }
 
-function isValidReward(value: unknown): value is Reward {
+function isRewardTier(value: unknown): value is Reward["tier"] {
+  return value === "small" || value === "medium" || value === "big";
+}
+
+function isValidRewardCore(value: unknown): value is Omit<Reward, "tier"> & { tier?: Reward["tier"] } {
   return isRecord(value) && typeof value.id === "string" && typeof value.text === "string" &&
     typeof value.enabled === "boolean" && typeof value.createdAt === "string";
+}
+
+function isValidReward(value: unknown): value is Reward {
+  return isValidRewardCore(value) && isRewardTier(value.tier);
 }
 
 function isValidFiller(value: unknown): value is FillerTask {
@@ -72,17 +78,39 @@ function hasValidBoardCore(value: Record<string, unknown>): boolean {
     Array.isArray(value.completedPatterns) && value.completedPatterns.every((pattern) => typeof pattern === "string");
 }
 
-function hasValidModeFields(value: Record<string, unknown>): boolean {
-  return (value.mode === "choose" || value.mode === "random") &&
+function isValidAwardedReward(value: unknown, requireTier: boolean): boolean {
+  return value === null || (isRecord(value) && typeof value.id === "string" && typeof value.text === "string" &&
+    (!requireTier || isRewardTier(value.tier)));
+}
+
+function hasValidModeFields(value: Record<string, unknown>, allowQuest: boolean, requireTier: boolean): boolean {
+  return (value.mode === "choose" || value.mode === "random" || (allowQuest && value.mode === "quest")) &&
     typeof value.targetPattern === "string" && patternIds.includes(value.targetPattern as PatternId) &&
     typeof value.targetCompleted === "boolean" &&
-    (value.awardedReward === null || (isRecord(value.awardedReward) &&
-      typeof value.awardedReward.id === "string" && typeof value.awardedReward.text === "string"));
+    isValidAwardedReward(value.awardedReward, requireTier);
+}
+
+function isValidQuest(value: unknown): boolean {
+  return value === null || (isRecord(value) && typeof value.completed === "boolean" &&
+    Array.isArray(value.history) && value.history.every((stage) =>
+      isRecord(stage) && typeof stage.targetPattern === "string" &&
+      patternIds.includes(stage.targetPattern as PatternId) &&
+      Array.isArray(stage.completedVariants) && stage.completedVariants.every((item) => typeof item === "string") &&
+      typeof stage.completedAt === "string" && isValidAwardedReward(stage.awardedReward, true)));
 }
 
 function isValidBoard(value: unknown): value is BoardState | null {
   if (value === null) return true;
-  return isRecord(value) && hasValidBoardCore(value) && hasValidModeFields(value) &&
+  return isRecord(value) && hasValidBoardCore(value) && hasValidModeFields(value, true, true) &&
+    value.squares instanceof Array && value.squares.every(
+      (square) => isRecord(square) && typeof square.countedComplete === "boolean",
+    ) && typeof value.completionRecorded === "boolean" && isValidQuest(value.quest) &&
+    ((value.mode === "quest" && value.quest !== null) || (value.mode !== "quest" && value.quest === null));
+}
+
+function isValidLegacyBoard(value: unknown): value is Omit<BoardState, "quest"> | null {
+  if (value === null) return true;
+  return isRecord(value) && hasValidBoardCore(value) && hasValidModeFields(value, false, false) &&
     value.squares instanceof Array && value.squares.every(
       (square) => isRecord(square) && typeof square.countedComplete === "boolean",
     ) && typeof value.completionRecorded === "boolean";
@@ -127,14 +155,14 @@ function isValidCosmetics(value: Record<string, unknown>): boolean {
   });
 }
 
-function hasValidCollections(value: Record<string, unknown>): boolean {
+function hasValidCollections(value: Record<string, unknown>, requireTier = true): boolean {
   return Array.isArray(value.tasks) && value.tasks.every(isValidTask) &&
-    Array.isArray(value.rewards) && value.rewards.every(isValidReward) &&
+    Array.isArray(value.rewards) && value.rewards.every(requireTier ? isValidReward : isValidRewardCore) &&
     Array.isArray(value.fillerTasks) && value.fillerTasks.every(isValidFiller);
 }
 
 function isValidState(value: unknown): value is AppState {
-  return isRecord(value) && value.version === 4 && hasValidCollections(value) &&
+  return isRecord(value) && value.version === 5 && hasValidCollections(value) &&
     isValidBoard(value.board) && isValidStats(value.stats) && isValidStreak(value.streak) &&
     isValidCosmetics(value);
 }
@@ -159,9 +187,11 @@ function migrateBoard(value: unknown, version: 1 | 2): BoardState | null | undef
       targetCompleted: completedPatterns.length > 0,
       completionRecorded: completedPatterns.length > 0,
       awardedReward: null,
+      quest: null,
     };
   }
-  if (!hasValidModeFields(value)) return undefined;
+  if (!hasValidModeFields(value, false, false)) return undefined;
+  const legacyReward = value.awardedReward as { id: string; text: string } | null;
   return {
     id: value.id as string,
     createdAt: value.createdAt as string,
@@ -171,8 +201,20 @@ function migrateBoard(value: unknown, version: 1 | 2): BoardState | null | undef
     completedPatterns: value.completedPatterns as string[],
     targetCompleted: value.targetCompleted as boolean,
     completionRecorded: value.targetCompleted as boolean,
-    awardedReward: value.awardedReward as BoardState["awardedReward"],
+    awardedReward: legacyReward ? { ...legacyReward, tier: "medium" } : null,
+    quest: null,
   };
+}
+
+function migrateLegacyModernBoard(value: unknown): BoardState | null | undefined {
+  if (!isValidLegacyBoard(value)) return undefined;
+  if (value === null) return null;
+  const reward = value.awardedReward as { id: string; text: string } | null;
+  return {
+    ...value,
+    awardedReward: reward ? { ...reward, tier: "medium" } : null,
+    quest: null,
+  } as BoardState;
 }
 
 function migrateState(raw: string | null): AppState | null {
@@ -180,23 +222,29 @@ function migrateState(raw: string | null): AppState | null {
   try {
     const value: unknown = JSON.parse(raw);
     if (isValidState(value)) return value;
-    if (!isRecord(value) || (value.version !== 1 && value.version !== 2 && value.version !== 3) ||
-      !hasValidCollections(value)) return null;
-    const board = value.version === 3
-      ? (isValidBoard(value.board) ? value.board : undefined)
-      : migrateBoard(value.board, value.version);
-    if (board === undefined || (value.version === 3 && (!isValidStats(value.stats) || !isValidStreak(value.streak)))) return null;
+    if (!isRecord(value) || ![1, 2, 3, 4].includes(value.version as number) ||
+      !hasValidCollections(value, false)) return null;
+    const version = value.version as 1 | 2 | 3 | 4;
+    const board = version >= 3
+      ? migrateLegacyModernBoard(value.board)
+      : migrateBoard(value.board, version as 1 | 2);
+    if (board === undefined || (version >= 3 && (!isValidStats(value.stats) || !isValidStreak(value.streak))) ||
+      (version === 4 && !isValidCosmetics(value))) return null;
+    const rewards = (value.rewards as Array<Omit<Reward, "tier"> & { tier?: Reward["tier"] }>).map((reward) => ({
+      ...reward,
+      tier: reward.tier ?? "medium",
+    }));
     return {
-      version: 4,
+      version: 5,
       tasks: value.tasks as UserTask[],
-      rewards: value.rewards as Reward[],
+      rewards,
       fillerTasks: value.fillerTasks as FillerTask[],
       board,
-      stats: value.version === 3 ? value.stats as UserStats : { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
-      streak: value.version === 3 ? value.streak as StreakState : { current: 0, best: 0, lastCompletedDate: null },
-      settings: { selectedTheme: "simple", selectedDauber: "x" },
-      unlocks: createInitialUnlocks(),
-      achievements: createInitialAchievements(),
+      stats: version >= 3 ? value.stats as UserStats : { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
+      streak: version >= 3 ? value.streak as StreakState : { current: 0, best: 0, lastCompletedDate: null },
+      settings: version === 4 ? value.settings as AppState["settings"] : { selectedTheme: "simple", selectedDauber: "x" },
+      unlocks: version === 4 ? value.unlocks as AppState["unlocks"] : createInitialUnlocks(),
+      achievements: version === 4 ? value.achievements as AppState["achievements"] : createInitialAchievements(),
     };
   } catch {
     return null;
@@ -229,7 +277,7 @@ export function saveState(state: AppState): void {
 }
 
 export function createBackup(state: AppState, exportedAt = new Date().toISOString()): BackupFile {
-  return { app: "productivity-bingo", schemaVersion: 4, exportedAt, data: state };
+  return { app: "productivity-bingo", schemaVersion: 5, exportedAt, data: state };
 }
 
 export function parseBackup(raw: string): AppState {
@@ -242,7 +290,7 @@ export function parseBackup(raw: string): AppState {
   if (!isRecord(value) || value.app !== "productivity-bingo") {
     throw new Error("That file is not a Productivity Bingo backup.");
   }
-  if (value.schemaVersion !== 3 && value.schemaVersion !== 4) {
+  if (value.schemaVersion !== 3 && value.schemaVersion !== 4 && value.schemaVersion !== 5) {
     throw new Error("This backup uses an unsupported schema version.");
   }
   if (typeof value.exportedAt !== "string") {

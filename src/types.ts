@@ -10,7 +10,10 @@ export type Reward = {
   text: string;
   enabled: boolean;
   createdAt: string;
+  tier: RewardTier;
 };
+
+export type RewardTier = "small" | "medium" | "big";
 
 export type FillerTask = {
   id: string;
@@ -38,9 +41,21 @@ export type PatternId =
   | "postage-stamp"
   | "blackout";
 
-export type BingoMode = "choose" | "random";
+export type BingoMode = "choose" | "random" | "quest";
 
-export type AwardedReward = Pick<Reward, "id" | "text">;
+export type AwardedReward = Pick<Reward, "id" | "text" | "tier">;
+
+export type QuestStageResult = {
+  targetPattern: PatternId;
+  completedVariants: string[];
+  completedAt: string;
+  awardedReward: AwardedReward | null;
+};
+
+export type QuestState = {
+  history: QuestStageResult[];
+  completed: boolean;
+};
 
 export type BoardState = {
   id: string;
@@ -52,6 +67,7 @@ export type BoardState = {
   targetCompleted: boolean;
   completionRecorded: boolean;
   awardedReward: AwardedReward | null;
+  quest: QuestState | null;
 };
 
 export type UserStats = {
@@ -97,7 +113,7 @@ export type AppearanceSettings = {
 };
 
 export type AppState = {
-  version: 4;
+  version: 5;
   tasks: UserTask[];
   rewards: Reward[];
   fillerTasks: FillerTask[];
@@ -111,7 +127,7 @@ export type AppState = {
 
 export type BackupFile = {
   app: "productivity-bingo";
-  schemaVersion: 4;
+  schemaVersion: 5;
   exportedAt: string;
   data: AppState;
 };

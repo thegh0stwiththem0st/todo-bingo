@@ -1,30 +1,34 @@
 import { useState, type FormEvent } from "react";
+import type { RewardTier } from "../types";
 
 export type EditableItem = {
   id: string;
   text: string;
   enabled: boolean;
+  tier?: RewardTier;
 };
 
 type ItemEditorProps = {
   noun: "task" | "reward";
   items: EditableItem[];
-  onAdd: (text: string) => void;
+  onAdd: (text: string, tier?: RewardTier) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
+  onTierChange?: (id: string, tier: RewardTier) => void;
 };
 
-export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle }: ItemEditorProps) {
+export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle, onTierChange }: ItemEditorProps) {
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
+  const [draftTier, setDraftTier] = useState<RewardTier>("medium");
 
   function submit(event: FormEvent) {
     event.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    onAdd(text);
+    onAdd(text, noun === "reward" ? draftTier : undefined);
     setDraft("");
   }
 
@@ -44,6 +48,13 @@ export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle }: I
           onChange={(event) => setDraft(event.target.value)}
           placeholder={noun === "task" ? "Add something to do…" : "Add something to look forward to…"}
         />
+        {noun === "reward" && (
+          <select aria-label="New reward tier" value={draftTier} onChange={(event) => setDraftTier(event.target.value as RewardTier)}>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="big">Big</option>
+          </select>
+        )}
         <button className="button button-primary" type="submit">Add</button>
       </form>
       {items.length === 0 ? (
@@ -78,6 +89,18 @@ export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle }: I
               ) : (
                 <>
                   <span className="item-text">{item.text}</span>
+                  {item.tier && onTierChange && (
+                    <select
+                      className="item-tier"
+                      aria-label={`Reward tier for ${item.text}`}
+                      value={item.tier}
+                      onChange={(event) => onTierChange(item.id, event.target.value as RewardTier)}
+                    >
+                      <option value="small">Small</option>
+                      <option value="medium">Medium</option>
+                      <option value="big">Big</option>
+                    </select>
+                  )}
                   <button
                     className="icon-button"
                     type="button"

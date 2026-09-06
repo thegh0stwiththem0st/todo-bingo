@@ -11,6 +11,8 @@ import { evaluateAchievements, type AchievementDefinition } from "./lib/achievem
 import { createId } from "./lib/id";
 import { detectTargetPatterns, getTargetPattern, pickRandomTarget } from "./lib/patterns";
 import { normalizeStreak, recordBingoDay, recordBingoStats } from "./lib/progress";
+import { getNextQuestTarget, pickQuestStart } from "./lib/quest";
+import { selectReward } from "./lib/rewards";
 import { loadState, saveState } from "./lib/storage";
 import type { AppState, BingoMode, PatternId, Reward, UserTask } from "./types";
 
@@ -93,13 +95,16 @@ export default function App() {
   function makeBoard() {
     if (state.board && completedCount > 0 && !window.confirm("Replace this in-progress board? Your marks will be lost.")) return;
     try {
-      const targetPattern = selectedMode === "random" ? pickRandomTarget() : selectedTarget;
+      const targetPattern = selectedMode === "random"
+        ? pickRandomTarget()
+        : selectedMode === "quest" ? pickQuestStart() : selectedTarget;
       const board = generateBoard(state.tasks, state.fillerTasks, { mode: selectedMode, targetPattern });
       const activeTaskCount = state.tasks.filter((task) => task.active).length;
       setState((current) => ({ ...current, board }));
+      const challenge = selectedMode === "quest" ? `Quest level 1: ${getTargetPattern(targetPattern).label}` : `Today's challenge: ${getTargetPattern(targetPattern).label}`;
       setMessage(activeTaskCount > 25
-        ? `Today's challenge: ${getTargetPattern(targetPattern).label}. 25 of your ${activeTaskCount} active tasks were chosen; the rest remain in your pool.`
-        : `Today's challenge: ${getTargetPattern(targetPattern).label}. Pick a square and get rolling!`);
+        ? `${challenge}. 25 of your ${activeTaskCount} active tasks were chosen; the rest remain in your pool.`
+        : `${challenge}. Pick a square and get rolling!`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not make a board.");
     }
@@ -124,14 +129,26 @@ export default function App() {
       const firstBoardCompletion = targetCompleted && !current.board.completionRecorded;
       let awardedReward = current.board.awardedReward;
       if (targetCompleted && !current.board.targetCompleted && !awardedReward) {
-        const enabledRewards = current.rewards.filter((reward) => reward.enabled);
-        const reward = enabledRewards[Math.floor(Math.random() * enabledRewards.length)];
-        awardedReward = reward ? { id: reward.id, text: reward.text } : null;
+        const reward = selectReward(current.rewards, current.board.targetPattern);
+        awardedReward = reward ? { id: reward.id, text: reward.text, tier: reward.tier } : null;
       }
       let streak = current.streak;
+      let quest = current.board.quest;
       if (firstBoardCompletion) {
         stats = recordBingoStats(stats, current.board.targetPattern);
         streak = recordBingoDay(streak);
+        if (quest) {
+          const nextTarget = getNextQuestTarget(current.board.targetPattern, completedPatterns);
+          quest = {
+            history: [...quest.history, {
+              targetPattern: current.board.targetPattern,
+              completedVariants: completedPatterns,
+              completedAt: new Date().toISOString(),
+              awardedReward,
+            }],
+            completed: nextTarget === null,
+          };
+        }
       }
       return {
         ...current,
@@ -144,6 +161,29 @@ export default function App() {
           targetCompleted,
           completionRecorded: current.board.completionRecorded || firstBoardCompletion,
           awardedReward,
+          quest,
+        },
+      };
+    });
+  }
+
+  function advanceQuest() {
+    setState((current) => {
+      const board = current.board;
+      if (!board?.quest || board.quest.completed || !board.completionRecorded) return current;
+      const completedStage = board.quest.history[board.quest.history.length - 1];
+      const nextTarget = getNextQuestTarget(board.targetPattern, completedStage?.completedVariants ?? []);
+      if (!nextTarget) return current;
+      setMessage(`Quest level ${board.quest.history.length + 1}: ${getTargetPattern(nextTarget).label}. Your completed squares carry forward.`);
+      return {
+        ...current,
+        board: {
+          ...board,
+          targetPattern: nextTarget,
+          completedPatterns: [],
+          targetCompleted: false,
+          completionRecorded: false,
+          awardedReward: null,
         },
       };
     });
@@ -178,10 +218,10 @@ export default function App() {
             <div>
               <p className="status-label" id="game-heading">Current goal</p>
               <p className="status-value">
-                {currentTarget ? currentTarget.label : selectedMode === "random" ? "A surprise pattern" : getTargetPattern(selectedTarget).label}
+                {currentTarget ? currentTarget.label : selectedMode === "random" ? "A surprise pattern" : selectedMode === "quest" ? "A multi-level quest" : getTargetPattern(selectedTarget).label}
               </p>
               <p className="status-description">
-                {currentTarget ? currentTarget.description : selectedMode === "random" ? "Your target will be revealed with the board." : getTargetPattern(selectedTarget).description}
+                {currentTarget ? currentTarget.description : selectedMode === "random" ? "Your target will be revealed with the board." : selectedMode === "quest" ? "Build through connected targets and finish with Blackout." : getTargetPattern(selectedTarget).description}
               </p>
             </div>
             {state.board && <span className="progress-pill">{completedCount}/25 complete</span>}
@@ -195,8 +235,25 @@ export default function App() {
                 {completedVariantLabels.length > 1 && <><br />{completedVariantLabels.join(" · ")}</>}
                 <br />
                 {state.board.awardedReward
-                  ? <>Your reward: <strong>{state.board.awardedReward.text}</strong></>
+                  ? <>Your {state.board.awardedReward.tier} reward: <strong>{state.board.awardedReward.text}</strong></>
                   : "No rewards enabled yet! Add one for your next board."}
+                {state.board.quest && !state.board.quest.completed && state.board.completionRecorded && (
+                  <button className="button quest-next-button" type="button" onClick={advanceQuest}>Continue quest</button>
+                )}
+                {state.board.quest?.completed && <span className="quest-complete-copy">Quest complete — Blackout conquered!</span>}
+              </div>
+            </div>
+          )}
+          {state.board?.quest && (
+            <div className="quest-progress" aria-label="Quest progress">
+              <strong>{state.board.quest.completed ? "Quest complete" : `Quest level ${Math.max(1, state.board.quest.history.length + (state.board.completionRecorded ? 0 : 1))}`}</strong>
+              {state.board.quest.history.length > 0 && (
+                <span>{state.board.quest.history.map((stage) => getTargetPattern(stage.targetPattern).label).join(" → ")}</span>
+              )}
+              <div className="quest-rewards">
+                {state.board.quest.history.map((stage, index) => (
+                  <span key={`${stage.targetPattern}-${stage.completedAt}`}>Level {index + 1}: {stage.awardedReward?.text ?? "No reward"}</span>
+                ))}
               </div>
             </div>
           )}
@@ -246,10 +303,11 @@ export default function App() {
             {activePanel === "rewards" && (
               <RewardManager
                 rewards={state.rewards}
-                onAdd={(text) => updateRewards((rewards) => [...rewards, { id: createId("reward"), text, enabled: true, createdAt: new Date().toISOString() }])}
+                onAdd={(text, tier) => updateRewards((rewards) => [...rewards, { id: createId("reward"), text, tier, enabled: true, createdAt: new Date().toISOString() }])}
                 onEdit={(id, text) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, text } : reward))}
                 onDelete={(id) => updateRewards((rewards) => rewards.filter((reward) => reward.id !== id))}
                 onToggle={(id) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, enabled: !reward.enabled } : reward))}
+                onTierChange={(id, tier) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, tier } : reward))}
               />
             )}
             {activePanel === "fillers" && (

@@ -65,5 +65,6 @@ export function generateBoard(
     targetCompleted: false,
     completionRecorded: false,
     awardedReward: null,
+    quest: options.mode === "quest" ? { history: [], completed: false } : null,
   };
 }

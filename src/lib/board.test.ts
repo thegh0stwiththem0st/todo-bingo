@@ -41,4 +41,9 @@ describe("generateBoard", () => {
     expect(board.awardedReward).toBeNull();
     expect(board.squares.every((square) => !square.countedComplete)).toBe(true);
   });
+
+  it("initializes quest state only in quest mode", () => {
+    const board = generateBoard([], defaultFillerTasks, { mode: "quest", targetPattern: "four-corners" }, () => 0.5);
+    expect(board.quest).toEqual({ history: [], completed: false });
+  });
 });

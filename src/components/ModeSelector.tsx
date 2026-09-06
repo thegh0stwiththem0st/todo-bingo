@@ -28,6 +28,14 @@ export function ModeSelector({ mode, target, onModeChange, onTargetChange }: Mod
         >
           Pick for me
         </button>
+        <button
+          type="button"
+          className={mode === "quest" ? "is-active" : ""}
+          aria-pressed={mode === "quest"}
+          onClick={() => onModeChange("quest")}
+        >
+          Quest mode
+        </button>
       </div>
       {mode === "choose" ? (
         <label className="target-select">
@@ -39,8 +47,10 @@ export function ModeSelector({ mode, target, onModeChange, onTargetChange }: Mod
           </select>
           <small>{getTargetPattern(target).description}</small>
         </label>
-      ) : (
+      ) : mode === "random" ? (
         <p className="random-hint">We’ll choose a surprise target when the board is made. Blackout is intentionally rare.</p>
+      ) : (
+        <p className="random-hint">Build through connected patterns on one board, earn a reward at every level, and finish with Blackout.</p>
       )}
     </div>
   );

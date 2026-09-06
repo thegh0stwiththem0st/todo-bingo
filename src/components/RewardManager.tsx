@@ -1,12 +1,13 @@
-import type { Reward } from "../types";
+import type { Reward, RewardTier } from "../types";
 import { ItemEditor } from "./ItemEditor";
 
 type RewardManagerProps = {
   rewards: Reward[];
-  onAdd: (text: string) => void;
+  onAdd: (text: string, tier: RewardTier) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
+  onTierChange: (id: string, tier: RewardTier) => void;
 };
 
 export function RewardManager(props: RewardManagerProps) {
@@ -24,11 +25,13 @@ export function RewardManager(props: RewardManagerProps) {
           id: reward.id,
           text: reward.text,
           enabled: reward.enabled,
+          tier: reward.tier,
         }))}
-        onAdd={props.onAdd}
+        onAdd={(text, tier) => props.onAdd(text, tier ?? "medium")}
         onEdit={props.onEdit}
         onDelete={props.onDelete}
         onToggle={props.onToggle}
+        onTierChange={props.onTierChange}
       />
     </section>
   );

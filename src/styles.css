@@ -99,12 +99,19 @@ main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .8fr
 .placeholder-icon { color: var(--gold); font-size: 3rem; margin-bottom: -16px; }
 .bingo-alert { display: flex; gap: 12px; align-items: center; background: #fff2bd; border: 1px solid #e6bb51; border-radius: 12px; color: #3b2b0a; margin: -5px 0 15px; padding: 10px 14px; }
 .bingo-alert > span { font-size: 1.5rem; }
+.quest-next-button { display: block; margin-top: 9px; background: #3b2b0a; color: #fff2bd; padding: 7px 11px; }
+.quest-complete-copy { display: block; font-weight: 800; margin-top: 7px; }
+.quest-progress { display: grid; gap: 4px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--paper) 80%, var(--accent-soft)); margin: -5px 0 14px; padding: 9px 12px; }
+.quest-progress > strong { color: var(--accent-dark); font-size: .78rem; text-transform: uppercase; }
+.quest-progress > span { color: var(--muted); font-size: .72rem; }
+.quest-rewards { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.quest-rewards span { border-radius: 99px; background: var(--accent-soft); color: var(--ink); font-size: .68rem; padding: 4px 7px; }
 .notice { background: var(--accent-soft); border-radius: 8px; color: var(--ink); font-size: .88rem; margin: -5px 0 15px; padding: 8px 12px; }
 .manage-area { overflow: hidden; }
 .mode-config { padding: 20px; }
 .mode-config h2 { margin-bottom: 12px; }
 .mode-picker { display: grid; gap: 12px; }
-.mode-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px; background: color-mix(in srgb, var(--paper) 65%, var(--line)); border-radius: 11px; }
+.mode-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 4px; background: color-mix(in srgb, var(--paper) 65%, var(--line)); border-radius: 11px; }
 .mode-buttons button { border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); font-size: .8rem; font-weight: 750; padding: 8px 5px; }
 .mode-buttons button.is-active { border-color: var(--line); background: var(--paper); color: var(--accent-dark); box-shadow: 0 2px 8px rgba(65, 55, 35, .08); }
 .target-select { display: grid; gap: 5px; }
@@ -119,6 +126,8 @@ main { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, .8fr
 .panel-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-heading p { color: var(--muted); font-size: .82rem; margin: 3px 0 0; }
 .add-form { display: flex; gap: 8px; }
+.add-form select, .item-tier { border: 1px solid var(--line); border-radius: 9px; background: var(--paper); color: var(--ink); font-size: .76rem; padding: 7px; }
+.item-tier { width: 76px; padding: 5px; }
 input[type="text"], input:not([type]), textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); color: var(--ink); padding: 10px 11px; }
 .add-form input { min-width: 0; }
 .item-list { list-style: none; margin: 16px 0 0; padding: 0; }
