@@ -1,4 +1,10 @@
-import type { PatternId, Reward, RewardTier } from "../types";
+import type { PatternId, Reward, RewardFiller, RewardTier } from "../types";
+
+export type SelectableReward = Pick<Reward, "id" | "text" | "enabled"> & { tier: RewardTier };
+
+export function rewardFillerToSelectable(reward: RewardFiller): SelectableReward {
+  return { id: reward.id, text: reward.text, enabled: reward.enabled, tier: reward.size };
+}
 
 const targetTiers: Record<PatternId, RewardTier> = {
   "standard-line": "small",
@@ -15,10 +21,10 @@ export function preferredRewardTier(target: PatternId): RewardTier {
 }
 
 export function selectReward(
-  rewards: Reward[],
+  rewards: SelectableReward[],
   target: PatternId,
   random: () => number = Math.random,
-): Reward | null {
+): SelectableReward | null {
   const enabled = rewards.filter((reward) => reward.enabled);
   if (enabled.length === 0) return null;
   const preferred = enabled.filter((reward) => reward.tier === preferredRewardTier(target));

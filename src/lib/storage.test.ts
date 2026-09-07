@@ -51,7 +51,7 @@ describe("backup validation", () => {
       exportedAt: "2026-09-06T12:00:00.000Z",
       data: legacyData,
     }));
-    expect(imported.version).toBe(6);
+    expect(imported.version).toBe(9);
     expect(imported.stats.completedSquares).toBe(25);
     expect(imported.unlocks.themes).toContain("dark");
   });
@@ -70,9 +70,51 @@ describe("backup validation", () => {
       exportedAt: "2026-09-06T12:00:00.000Z",
       data: legacyData,
     }));
-    expect(imported.version).toBe(6);
+    expect(imported.version).toBe(9);
     expect(imported.rewards[0].tier).toBe("medium");
     expect(imported.tasks[0].kind).toBe("repeatable");
     expect(imported.settings).toEqual(current.settings);
+  });
+
+  it("migrates schema 6 data with default workspace and seasonal settings", () => {
+    const current = createInitialState();
+    const { workspace: _workspace, ...legacyData } = {
+      ...current,
+      version: 6,
+      settings: { selectedTheme: "simple", selectedDauber: "x" },
+    };
+    const imported = parseBackup(JSON.stringify({
+      app: "productivity-bingo",
+      schemaVersion: 6,
+      exportedAt: "2026-09-06T12:00:00.000Z",
+      data: legacyData,
+    }));
+    expect(imported.version).toBe(9);
+    expect(imported.workspace.pinnedTools).toEqual([]);
+    expect(imported.workspace.pomodoro.focusMinutes).toBe(25);
+    expect(imported.settings.seasonalEffects).toBe(true);
+  });
+
+  it("migrates schema 7 workspace data and adds milestone 7 defaults", () => {
+    const current = createInitialState();
+    const { rewardFillers: _fillers, ...legacy } = current;
+    const { stopwatch: _stopwatch, timer: _timer, timeZones: _zones, timeZoneSource: _source, comparisonDate: _date, comparisonTime: _time, dayCountdowns: _days, ...legacyWorkspace } = current.workspace;
+    const legacyData = { ...legacy, version: 7, workspace: { ...legacyWorkspace, notes: [{ id: "note-1", text: "Keep me", createdAt: "2026-09-06", x: 40, y: 50 }] } };
+    const imported = parseBackup(JSON.stringify({ app: "productivity-bingo", schemaVersion: 7, exportedAt: "2026-09-06T12:00:00.000Z", data: legacyData }));
+    expect(imported.version).toBe(9);
+    expect(imported.workspace.notes[0].text).toBe("Keep me");
+    expect(imported.workspace.stopwatch.elapsedMs).toBe(0);
+    expect(imported.rewardFillers).toHaveLength(33);
+  });
+
+  it("migrates schema 8 while preserving reward and workspace choices", () => {
+    const current = createInitialState();
+    const { floatingTools: _positions, ...legacyWorkspace } = current.workspace;
+    const legacyData = { ...current, version: 8, rewardFillers: current.rewardFillers.map((reward, index) => ({ ...reward, enabled: index === 0 })), workspace: { ...legacyWorkspace, pinnedTools: ["stopwatch"] } };
+    const imported = parseBackup(JSON.stringify({ app: "productivity-bingo", schemaVersion: 8, exportedAt: "2026-09-07T12:00:00.000Z", data: legacyData }));
+    expect(imported.version).toBe(9);
+    expect(imported.rewardFillers.filter((reward) => reward.enabled)).toHaveLength(1);
+    expect(imported.workspace.pinnedTools).toEqual(["stopwatch"]);
+    expect(imported.workspace.floatingTools).toEqual({});
   });
 });

@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BingoCelebration, type CelebrationKind } from "./components/BingoCelebration";
 import { BingoBoard } from "./components/BingoBoard";
 import { AppearanceManager } from "./components/AppearanceManager";
 import { DataManager } from "./components/DataManager";
 import { FillerManager } from "./components/FillerManager";
+import { FloatingNotes } from "./components/FloatingNotes";
 import { ModeSelector } from "./components/ModeSelector";
 import { RewardManager } from "./components/RewardManager";
 import { TaskManager } from "./components/TaskManager";
+import { FloatingTools, ToolDrawer } from "./components/Workspace";
 import { generateBoard } from "./lib/board";
+import { defaultRewardFillers } from "./data/rewardFillers";
 import { evaluateAchievements, type AchievementDefinition } from "./lib/achievements";
 import { createId } from "./lib/id";
 import { detectTargetPatterns, getTargetPattern, pickRandomTarget } from "./lib/patterns";
 import { normalizeStreak, recordBingoDay, recordBingoStats } from "./lib/progress";
 import { getNextQuestTarget, pickQuestStart } from "./lib/quest";
-import { selectReward } from "./lib/rewards";
+import { rewardFillerToSelectable, selectReward } from "./lib/rewards";
 import { loadState, saveState } from "./lib/storage";
 import { retireCompletedOneTimeTasks } from "./lib/tasks";
-import type { AppState, BingoMode, PatternId, Reward, TaskKind, UserTask } from "./types";
+import { getHolidayTakeover } from "./lib/workspace";
+import type { AppState, BingoMode, PatternId, Reward, TaskKind, UserTask, WorkspaceState } from "./types";
 
 type Panel = "tasks" | "rewards" | "fillers" | "appearance" | "data";
 
@@ -32,6 +37,11 @@ export default function App() {
   } | null>(null);
   const [selectedMode, setSelectedMode] = useState<BingoMode>(state.board?.mode ?? "choose");
   const [selectedTarget, setSelectedTarget] = useState<PatternId>(state.board?.targetPattern ?? "standard-line");
+  const initialCompletionKey = state.board?.targetCompleted
+    ? `${state.board.id}:${state.board.targetPattern}:${state.board.quest?.history.length ?? 0}`
+    : null;
+  const celebratedCompletions = useRef(new Set(initialCompletionKey ? [initialCompletionKey] : []));
+  const [celebration, setCelebration] = useState<{ key: string; kind: CelebrationKind } | null>(null);
 
   useEffect(() => {
     saveState(state);
@@ -40,6 +50,34 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = state.settings.selectedTheme;
   }, [state.settings.selectedTheme]);
+
+  useEffect(() => {
+    function applyHoliday() {
+      const holiday = getHolidayTakeover(new Date());
+      if (holiday) document.documentElement.dataset.holiday = holiday.id;
+      else delete document.documentElement.dataset.holiday;
+    }
+    applyHoliday();
+    const interval = window.setInterval(applyHoliday, 15 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const completionKey = state.board?.targetCompleted
+    ? `${state.board.id}:${state.board.targetPattern}:${state.board.quest?.history.length ?? 0}`
+    : null;
+
+  useEffect(() => {
+    if (!completionKey || celebratedCompletions.current.has(completionKey)) return;
+    celebratedCompletions.current.add(completionKey);
+    const holiday = getHolidayTakeover(new Date());
+    setCelebration({ key: completionKey, kind: holiday?.id ?? "confetti" });
+  }, [completionKey]);
+
+  useEffect(() => {
+    if (!celebration) return;
+    const timeout = window.setTimeout(() => setCelebration(null), 5200);
+    return () => window.clearTimeout(timeout);
+  }, [celebration]);
 
   useEffect(() => {
     const result = evaluateAchievements(state);
@@ -93,6 +131,10 @@ export default function App() {
     setState((current) => ({ ...current, rewards: updater(current.rewards) }));
   }
 
+  function updateWorkspace(workspace: WorkspaceState) {
+    setState((current) => ({ ...current, workspace }));
+  }
+
   function makeBoard() {
     if (state.board && completedCount > 0 && !window.confirm("Replace this in-progress board? Your marks will be lost.")) return;
     try {
@@ -130,7 +172,7 @@ export default function App() {
       const firstBoardCompletion = targetCompleted && !current.board.completionRecorded;
       let awardedReward = current.board.awardedReward;
       if (targetCompleted && !current.board.targetCompleted && !awardedReward) {
-        const reward = selectReward(current.rewards, current.board.targetPattern);
+        const reward = selectReward([...current.rewards, ...current.rewardFillers.map(rewardFillerToSelectable)], current.board.targetPattern);
         awardedReward = reward ? { id: reward.id, text: reward.text, tier: reward.tier } : null;
       }
       let streak = current.streak;
@@ -210,6 +252,14 @@ export default function App() {
         </div>
         <div className="header-actions">
           <span className="streak-badge" aria-label={`${visibleStreak.current} day streak`}>🔥 {visibleStreak.current} day streak</span>
+          <button
+            className="button button-secondary tools-button"
+            type="button"
+            aria-expanded={state.workspace.drawerOpen}
+            onClick={() => updateWorkspace({ ...state.workspace, drawerOpen: !state.workspace.drawerOpen })}
+          >
+            Tools{state.workspace.pinnedTools.length > 0 ? ` (${state.workspace.pinnedTools.length})` : ""}
+          </button>
           <button className="button button-primary new-board-button" type="button" onClick={makeBoard}>
             {state.board ? "New board" : "Make my board"}
           </button>
@@ -308,11 +358,15 @@ export default function App() {
             {activePanel === "rewards" && (
               <RewardManager
                 rewards={state.rewards}
+                fillers={state.rewardFillers}
                 onAdd={(text, tier) => updateRewards((rewards) => [...rewards, { id: createId("reward"), text, tier, enabled: true, createdAt: new Date().toISOString() }])}
                 onEdit={(id, text) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, text } : reward))}
                 onDelete={(id) => updateRewards((rewards) => rewards.filter((reward) => reward.id !== id))}
                 onToggle={(id) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, enabled: !reward.enabled } : reward))}
                 onTierChange={(id, tier) => updateRewards((rewards) => rewards.map((reward) => reward.id === id ? { ...reward, tier } : reward))}
+                onFillerToggle={(id) => setState((current) => ({ ...current, rewardFillers: current.rewardFillers.map((reward) => reward.id === id ? { ...reward, enabled: !reward.enabled } : reward) }))}
+                onFillersEnabled={(enabled) => setState((current) => ({ ...current, rewardFillers: current.rewardFillers.map((reward) => ({ ...reward, enabled })) }))}
+                onFillersReset={() => setState((current) => ({ ...current, rewardFillers: defaultRewardFillers.map((reward) => ({ ...reward })) }))}
               />
             )}
             {activePanel === "fillers" && (
@@ -341,6 +395,13 @@ export default function App() {
           </div>
         </section>
       </main>
+      <ToolDrawer workspace={state.workspace} onChange={updateWorkspace} />
+      <FloatingTools workspace={state.workspace} onChange={updateWorkspace} />
+      {state.workspace.pinnedTools.includes("notes") && <FloatingNotes
+          notes={state.workspace.notes}
+          onChange={(notes) => updateWorkspace({ ...state.workspace, notes })}
+        />}
+      {celebration && <BingoCelebration key={celebration.key} kind={celebration.kind} />}
       {achievementToast && (
         <div className="achievement-toast" role="status">
           <span aria-hidden="true">✦</span>

@@ -1,0 +1,18 @@
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { createId } from "../lib/id";
+import { formatComparedTime, getZonedDateKey, timeZoneOptions, zonedDateTimeToInstant } from "../lib/timeTools";
+import type { SavedTimeZone, WorkspaceState } from "../types";
+
+type Props = Pick<WorkspaceState, "timeZones" | "timeZoneSource" | "comparisonDate" | "comparisonTime"> & { onChange: (patch: Partial<WorkspaceState>) => void };
+export function TimeZoneTool(props: Props) {
+  const [query, setQuery] = useState(""); const [now, setNow] = useState(new Date());
+  useEffect(() => { const interval = window.setInterval(() => setNow(new Date()), 30_000); return () => window.clearInterval(interval); }, []);
+  const choices = useMemo(() => timeZoneOptions.filter(([label, zone]) => `${label} ${zone}`.toLowerCase().includes(query.toLowerCase()) && !props.timeZones.some((saved) => saved.timeZone === zone)), [query, props.timeZones]);
+  function add(event: FormEvent) { event.preventDefault(); const exact = timeZoneOptions.find(([label, zone]) => query === `${label} — ${zone}` || query === label || query === zone); const choice = exact && !props.timeZones.some((saved) => saved.timeZone === exact[1]) ? exact : choices[0]; if (!choice) return; const next: SavedTimeZone = { id: createId("zone"), label: choice[0], timeZone: choice[1] }; props.onChange({ timeZones: [...props.timeZones, next], ...(props.timeZones.length === 0 ? { timeZoneSource: next.timeZone } : {}) }); setQuery(""); }
+  const instant = zonedDateTimeToInstant(props.comparisonDate, props.comparisonTime, props.timeZoneSource);
+  return <div className="time-zone-tool">
+    <form className="zone-search" onSubmit={add}><label>Find a city or time zone<input list="zone-options" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tokyo" /></label><datalist id="zone-options">{timeZoneOptions.filter(([, zone]) => !props.timeZones.some((saved) => saved.timeZone === zone)).map(([label, zone]) => <option key={zone} value={`${label} — ${zone}`} />)}</datalist><button className="button button-primary" type="submit" disabled={!query.trim()}>Add</button></form>
+    <ul className="zone-list">{props.timeZones.map((zone) => <li key={zone.id}><span><strong>{zone.label}</strong><small>{zone.timeZone}</small></span><time>{formatComparedTime(now, getZonedDateKey(now, props.timeZones[0]?.timeZone ?? zone.timeZone), zone.timeZone)}</time><button type="button" aria-label={`Remove ${zone.label}`} onClick={() => props.onChange({ timeZones: props.timeZones.filter((item) => item.id !== zone.id), timeZoneSource: props.timeZoneSource === zone.timeZone ? (props.timeZones.find((item) => item.id !== zone.id)?.timeZone ?? "UTC") : props.timeZoneSource })}>×</button></li>)}</ul>
+    <fieldset className="comparison"><legend>Compare a time</legend><label>From<select value={props.timeZoneSource} onChange={(event) => props.onChange({ timeZoneSource: event.target.value })}>{props.timeZones.map((zone) => <option key={zone.id} value={zone.timeZone}>{zone.label}</option>)}</select></label><label>Date<input type="date" value={props.comparisonDate} onChange={(event) => props.onChange({ comparisonDate: event.target.value })} /></label><label>Time<input type="time" value={props.comparisonTime} onChange={(event) => props.onChange({ comparisonTime: event.target.value })} /></label>{instant && <ul>{props.timeZones.filter((zone) => zone.timeZone !== props.timeZoneSource).map((zone) => <li key={zone.id}><strong>{zone.label}</strong><span>{formatComparedTime(instant, props.comparisonDate, zone.timeZone)}</span></li>)}</ul>}</fieldset>
+  </div>;
+}

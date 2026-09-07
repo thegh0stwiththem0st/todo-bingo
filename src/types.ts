@@ -18,6 +18,16 @@ export type Reward = {
 
 export type RewardTier = "small" | "medium" | "big";
 
+export type RewardFiller = {
+  id: string;
+  text: string;
+  enabled: boolean;
+  category: string;
+  size: RewardTier;
+  involvesSpending: boolean;
+  builtIn: true;
+};
+
 export type FillerTask = {
   id: string;
   text: string;
@@ -113,12 +123,85 @@ export type UnlockState = {
 export type AppearanceSettings = {
   selectedTheme: ThemeId;
   selectedDauber: DauberId;
+  seasonalEffects: boolean;
+  seasonalPreview: HolidayId | null;
+};
+
+export type ToolId = "pomodoro" | "stopwatch" | "timer" | "time-zones" | "days-until" | "notes" | "case-converter" | "sounds" | "developer";
+export type PomodoroPhase = "focus" | "break";
+export type AmbientSoundId = "rain" | "cafe" | "fireplace";
+export type HolidayId = "new-year" | "valentine" | "pride" | "halloween" | "winter";
+
+export type StickyNote = {
+  id: string;
+  text: string;
+  createdAt: string;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+};
+
+export type StopwatchState = {
+  elapsedMs: number;
+  startedAt: string | null;
+  isRunning: boolean;
+};
+
+export type CountdownTimerState = {
+  durationSeconds: number;
+  remainingSeconds: number;
+  endsAt: string | null;
+  isRunning: boolean;
+  completed: boolean;
+};
+
+export type SavedTimeZone = {
+  id: string;
+  label: string;
+  timeZone: string;
+};
+
+export type DayCountdown = {
+  id: string;
+  title: string;
+  targetDate: string;
+};
+
+export type PomodoroState = {
+  phase: PomodoroPhase;
+  focusMinutes: number;
+  breakMinutes: number;
+  remainingSeconds: number;
+  endsAt: string | null;
+  isRunning: boolean;
+};
+
+export type WorkspaceState = {
+  drawerOpen: boolean;
+  activeTool: ToolId;
+  pinnedTools: ToolId[];
+  floatingTools: Partial<Record<ToolId, { x: number; y: number; z: number }>>;
+  notes: StickyNote[];
+  pomodoro: PomodoroState;
+  stopwatch: StopwatchState;
+  timer: CountdownTimerState;
+  timeZones: SavedTimeZone[];
+  timeZoneSource: string;
+  comparisonDate: string;
+  comparisonTime: string;
+  dayCountdowns: DayCountdown[];
+  sound: {
+    selected: AmbientSoundId;
+    volume: number;
+  };
 };
 
 export type AppState = {
-  version: 6;
+  version: 9;
   tasks: UserTask[];
   rewards: Reward[];
+  rewardFillers: RewardFiller[];
   fillerTasks: FillerTask[];
   board: BoardState | null;
   stats: UserStats;
@@ -126,11 +209,12 @@ export type AppState = {
   settings: AppearanceSettings;
   unlocks: UnlockState;
   achievements: Record<AchievementId, AchievementProgress>;
+  workspace: WorkspaceState;
 };
 
 export type BackupFile = {
   app: "productivity-bingo";
-  schemaVersion: 6;
+  schemaVersion: 9;
   exportedAt: string;
   data: AppState;
 };
