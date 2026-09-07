@@ -14,7 +14,8 @@ import { normalizeStreak, recordBingoDay, recordBingoStats } from "./lib/progres
 import { getNextQuestTarget, pickQuestStart } from "./lib/quest";
 import { selectReward } from "./lib/rewards";
 import { loadState, saveState } from "./lib/storage";
-import type { AppState, BingoMode, PatternId, Reward, UserTask } from "./types";
+import { retireCompletedOneTimeTasks } from "./lib/tasks";
+import type { AppState, BingoMode, PatternId, Reward, TaskKind, UserTask } from "./types";
 
 type Panel = "tasks" | "rewards" | "fillers" | "appearance" | "data";
 
@@ -75,16 +76,16 @@ export default function App() {
     setState((current) => ({ ...current, tasks: updater(current.tasks) }));
   }
 
-  function addTask(text: string) {
-    const task: UserTask = { id: createId("task"), text, active: true, createdAt: new Date().toISOString() };
+  function addTask(text: string, kind: TaskKind) {
+    const task: UserTask = { id: createId("task"), text, kind, active: true, createdAt: new Date().toISOString() };
     updateTasks((tasks) => [...tasks, task]);
   }
 
-  function addTasks(lines: string[]) {
+  function addTasks(lines: string[], kind: TaskKind) {
     const createdAt = new Date().toISOString();
     updateTasks((tasks) => [
       ...tasks,
-      ...lines.map((text) => ({ id: createId("task"), text, active: true, createdAt })),
+      ...lines.map((text) => ({ id: createId("task"), text, kind, active: true, createdAt })),
     ]);
   }
 
@@ -150,8 +151,11 @@ export default function App() {
           };
         }
       }
+      const sessionComplete = targetCompleted && (quest === null || quest.completed);
+      const tasks = sessionComplete ? retireCompletedOneTimeTasks(current.tasks, squares) : current.tasks;
       return {
         ...current,
+        tasks,
         stats,
         streak,
         board: {
@@ -298,6 +302,7 @@ export default function App() {
                 onEdit={(id, text) => updateTasks((tasks) => tasks.map((task) => task.id === id ? { ...task, text } : task))}
                 onDelete={(id) => updateTasks((tasks) => tasks.filter((task) => task.id !== id))}
                 onToggle={(id) => updateTasks((tasks) => tasks.map((task) => task.id === id ? { ...task, active: !task.active } : task))}
+                onKindChange={(id, kind) => updateTasks((tasks) => tasks.map((task) => task.id === id ? { ...task, kind } : task))}
               />
             )}
             {activePanel === "rewards" && (

@@ -4,7 +4,7 @@ import type { UserTask } from "../types";
 import { generateBoard } from "./board";
 
 function task(index: number): UserTask {
-  return { id: `task-${index}`, text: `Task ${index}`, active: true, createdAt: "2026-01-01" };
+  return { id: `task-${index}`, text: `Task ${index}`, kind: "repeatable", active: true, createdAt: "2026-01-01" };
 }
 
 describe("generateBoard", () => {

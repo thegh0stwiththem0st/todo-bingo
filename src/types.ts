@@ -3,7 +3,10 @@ export type UserTask = {
   text: string;
   active: boolean;
   createdAt: string;
+  kind: TaskKind;
 };
+
+export type TaskKind = "one-time" | "repeatable";
 
 export type Reward = {
   id: string;
@@ -113,7 +116,7 @@ export type AppearanceSettings = {
 };
 
 export type AppState = {
-  version: 5;
+  version: 6;
   tasks: UserTask[];
   rewards: Reward[];
   fillerTasks: FillerTask[];
@@ -127,7 +130,7 @@ export type AppState = {
 
 export type BackupFile = {
   app: "productivity-bingo";
-  schemaVersion: 5;
+  schemaVersion: 6;
   exportedAt: string;
   data: AppState;
 };

@@ -16,13 +16,13 @@ import { achievementDefinitions, createInitialAchievements, createInitialUnlocks
 import { daubers, themes } from "./cosmetics";
 import { targetPatterns } from "./patterns";
 
-export const STORAGE_KEY = "productivity-bingo-state-v5";
-const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
+export const STORAGE_KEY = "productivity-bingo-state-v6";
+const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v5", "productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
 const patternIds = targetPatterns.map((pattern) => pattern.id);
 
 export function createInitialState(): AppState {
   return {
-    version: 5,
+    version: 6,
     tasks: [],
     rewards: [],
     fillerTasks: defaultFillerTasks.map((task) => ({ ...task })),
@@ -43,9 +43,13 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
-function isValidTask(value: unknown): value is UserTask {
+function isValidTaskCore(value: unknown): value is Omit<UserTask, "kind"> & { kind?: UserTask["kind"] } {
   return isRecord(value) && typeof value.id === "string" && typeof value.text === "string" &&
     typeof value.active === "boolean" && typeof value.createdAt === "string";
+}
+
+function isValidTask(value: unknown): value is UserTask {
+  return isValidTaskCore(value) && (value.kind === "one-time" || value.kind === "repeatable");
 }
 
 function isRewardTier(value: unknown): value is Reward["tier"] {
@@ -155,14 +159,14 @@ function isValidCosmetics(value: Record<string, unknown>): boolean {
   });
 }
 
-function hasValidCollections(value: Record<string, unknown>, requireTier = true): boolean {
-  return Array.isArray(value.tasks) && value.tasks.every(isValidTask) &&
+function hasValidCollections(value: Record<string, unknown>, requireTier = true, requireTaskKind = true): boolean {
+  return Array.isArray(value.tasks) && value.tasks.every(requireTaskKind ? isValidTask : isValidTaskCore) &&
     Array.isArray(value.rewards) && value.rewards.every(requireTier ? isValidReward : isValidRewardCore) &&
     Array.isArray(value.fillerTasks) && value.fillerTasks.every(isValidFiller);
 }
 
 function isValidState(value: unknown): value is AppState {
-  return isRecord(value) && value.version === 5 && hasValidCollections(value) &&
+  return isRecord(value) && value.version === 6 && hasValidCollections(value) &&
     isValidBoard(value.board) && isValidStats(value.stats) && isValidStreak(value.streak) &&
     isValidCosmetics(value);
 }
@@ -222,29 +226,35 @@ function migrateState(raw: string | null): AppState | null {
   try {
     const value: unknown = JSON.parse(raw);
     if (isValidState(value)) return value;
-    if (!isRecord(value) || ![1, 2, 3, 4].includes(value.version as number) ||
-      !hasValidCollections(value, false)) return null;
-    const version = value.version as 1 | 2 | 3 | 4;
-    const board = version >= 3
+    if (!isRecord(value) || ![1, 2, 3, 4, 5].includes(value.version as number)) return null;
+    const version = value.version as 1 | 2 | 3 | 4 | 5;
+    if (!hasValidCollections(value, version >= 5, false)) return null;
+    const board = version === 5
+      ? (isValidBoard(value.board) ? value.board : undefined)
+      : version >= 3
       ? migrateLegacyModernBoard(value.board)
       : migrateBoard(value.board, version as 1 | 2);
     if (board === undefined || (version >= 3 && (!isValidStats(value.stats) || !isValidStreak(value.streak))) ||
-      (version === 4 && !isValidCosmetics(value))) return null;
+      (version >= 4 && !isValidCosmetics(value))) return null;
     const rewards = (value.rewards as Array<Omit<Reward, "tier"> & { tier?: Reward["tier"] }>).map((reward) => ({
       ...reward,
       tier: reward.tier ?? "medium",
     }));
+    const tasks = (value.tasks as Array<Omit<UserTask, "kind"> & { kind?: UserTask["kind"] }>).map((task) => ({
+      ...task,
+      kind: task.kind ?? "repeatable",
+    }));
     return {
-      version: 5,
-      tasks: value.tasks as UserTask[],
+      version: 6,
+      tasks,
       rewards,
       fillerTasks: value.fillerTasks as FillerTask[],
       board,
       stats: version >= 3 ? value.stats as UserStats : { completedSquares: 0, totalBingos: 0, completedPatterns: {} },
       streak: version >= 3 ? value.streak as StreakState : { current: 0, best: 0, lastCompletedDate: null },
-      settings: version === 4 ? value.settings as AppState["settings"] : { selectedTheme: "simple", selectedDauber: "x" },
-      unlocks: version === 4 ? value.unlocks as AppState["unlocks"] : createInitialUnlocks(),
-      achievements: version === 4 ? value.achievements as AppState["achievements"] : createInitialAchievements(),
+      settings: version >= 4 ? value.settings as AppState["settings"] : { selectedTheme: "simple", selectedDauber: "x" },
+      unlocks: version >= 4 ? value.unlocks as AppState["unlocks"] : createInitialUnlocks(),
+      achievements: version >= 4 ? value.achievements as AppState["achievements"] : createInitialAchievements(),
     };
   } catch {
     return null;
@@ -277,7 +287,7 @@ export function saveState(state: AppState): void {
 }
 
 export function createBackup(state: AppState, exportedAt = new Date().toISOString()): BackupFile {
-  return { app: "productivity-bingo", schemaVersion: 5, exportedAt, data: state };
+  return { app: "productivity-bingo", schemaVersion: 6, exportedAt, data: state };
 }
 
 export function parseBackup(raw: string): AppState {
@@ -290,7 +300,7 @@ export function parseBackup(raw: string): AppState {
   if (!isRecord(value) || value.app !== "productivity-bingo") {
     throw new Error("That file is not a Productivity Bingo backup.");
   }
-  if (value.schemaVersion !== 3 && value.schemaVersion !== 4 && value.schemaVersion !== 5) {
+  if (value.schemaVersion !== 3 && value.schemaVersion !== 4 && value.schemaVersion !== 5 && value.schemaVersion !== 6) {
     throw new Error("This backup uses an unsupported schema version.");
   }
   if (typeof value.exportedAt !== "string") {

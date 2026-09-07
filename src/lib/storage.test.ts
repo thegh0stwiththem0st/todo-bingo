@@ -51,7 +51,7 @@ describe("backup validation", () => {
       exportedAt: "2026-09-06T12:00:00.000Z",
       data: legacyData,
     }));
-    expect(imported.version).toBe(5);
+    expect(imported.version).toBe(6);
     expect(imported.stats.completedSquares).toBe(25);
     expect(imported.unlocks.themes).toContain("dark");
   });
@@ -61,6 +61,7 @@ describe("backup validation", () => {
     const legacyData = {
       ...current,
       version: 4,
+      tasks: [{ id: "task-1", text: "Existing task", active: true, createdAt: "2026-09-06" }],
       rewards: [{ id: "reward-1", text: "Take a break", enabled: true, createdAt: "2026-09-06" }],
     };
     const imported = parseBackup(JSON.stringify({
@@ -69,8 +70,9 @@ describe("backup validation", () => {
       exportedAt: "2026-09-06T12:00:00.000Z",
       data: legacyData,
     }));
-    expect(imported.version).toBe(5);
+    expect(imported.version).toBe(6);
     expect(imported.rewards[0].tier).toBe("medium");
+    expect(imported.tasks[0].kind).toBe("repeatable");
     expect(imported.settings).toEqual(current.settings);
   });
 });

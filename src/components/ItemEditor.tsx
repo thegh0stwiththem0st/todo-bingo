@@ -1,34 +1,37 @@
 import { useState, type FormEvent } from "react";
-import type { RewardTier } from "../types";
+import type { RewardTier, TaskKind } from "../types";
 
 export type EditableItem = {
   id: string;
   text: string;
   enabled: boolean;
   tier?: RewardTier;
+  taskKind?: TaskKind;
 };
 
 type ItemEditorProps = {
   noun: "task" | "reward";
   items: EditableItem[];
-  onAdd: (text: string, tier?: RewardTier) => void;
+  onAdd: (text: string, tier?: RewardTier, taskKind?: TaskKind) => void;
   onEdit: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   onToggle: (id: string) => void;
   onTierChange?: (id: string, tier: RewardTier) => void;
+  onTaskKindChange?: (id: string, kind: TaskKind) => void;
 };
 
-export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle, onTierChange }: ItemEditorProps) {
+export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle, onTierChange, onTaskKindChange }: ItemEditorProps) {
   const [draft, setDraft] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [draftTier, setDraftTier] = useState<RewardTier>("medium");
+  const [draftTaskKind, setDraftTaskKind] = useState<TaskKind>("one-time");
 
   function submit(event: FormEvent) {
     event.preventDefault();
     const text = draft.trim();
     if (!text) return;
-    onAdd(text, noun === "reward" ? draftTier : undefined);
+    onAdd(text, noun === "reward" ? draftTier : undefined, noun === "task" ? draftTaskKind : undefined);
     setDraft("");
   }
 
@@ -54,6 +57,16 @@ export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle, onT
             <option value="medium">Medium</option>
             <option value="big">Big</option>
           </select>
+        )}
+        {noun === "task" && (
+          <label className="repeatable-check add-repeatable">
+            <input
+              type="checkbox"
+              checked={draftTaskKind === "repeatable"}
+              onChange={(event) => setDraftTaskKind(event.target.checked ? "repeatable" : "one-time")}
+            />
+            <span>Repeatable</span>
+          </label>
         )}
         <button className="button button-primary" type="submit">Add</button>
       </form>
@@ -100,6 +113,17 @@ export function ItemEditor({ noun, items, onAdd, onEdit, onDelete, onToggle, onT
                       <option value="medium">Medium</option>
                       <option value="big">Big</option>
                     </select>
+                  )}
+                  {item.taskKind && onTaskKindChange && (
+                    <label className="repeatable-check item-repeatable">
+                      <input
+                        type="checkbox"
+                        aria-label={`Repeat ${item.text}`}
+                        checked={item.taskKind === "repeatable"}
+                        onChange={(event) => onTaskKindChange(item.id, event.target.checked ? "repeatable" : "one-time")}
+                      />
+                      <span>Repeat</span>
+                    </label>
                   )}
                   <button
                     className="icon-button"
