@@ -117,4 +117,13 @@ describe("backup validation", () => {
     expect(imported.workspace.pinnedTools).toEqual(["stopwatch"]);
     expect(imported.workspace.floatingTools).toEqual({});
   });
+
+  it("retires the ambient-sounds tool without rejecting an otherwise valid backup", () => {
+    const state = createInitialState();
+    state.workspace.activeTool = "sounds";
+    state.workspace.pinnedTools = ["sounds", "stopwatch"];
+    const imported = parseBackup(JSON.stringify(createBackup(state)));
+    expect(imported.workspace.activeTool).toBe("pomodoro");
+    expect(imported.workspace.pinnedTools).toEqual(["stopwatch"]);
+  });
 });

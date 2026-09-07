@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { AmbientSoundsTool } from "./AmbientSoundsTool";
 import { DeveloperUtilitiesTool } from "./DeveloperUtilitiesTool";
 import { PomodoroTool } from "./PomodoroTool";
 import { StickyNotesTool } from "./StickyNotesTool";
@@ -23,7 +22,6 @@ const tools: Array<{ id: ToolId; label: string; icon: string; description: strin
   { id: "days-until", label: "Days until", icon: "▦", description: "Count down to important dates" },
   { id: "notes", label: "Sticky notes", icon: "▤", description: "Quick notes saved in this browser" },
   { id: "case-converter", label: "Case converter", icon: "Aa", description: "Convert text between common cases" },
-  { id: "sounds", label: "Ambient sounds", icon: "♫", description: "Rain, café, and fireplace noise" },
   { id: "developer", label: "Developer utilities", icon: "{ }", description: "Format JSON, XML, SQL, and lists" },
 ];
 
@@ -37,9 +35,6 @@ function ToolContent({ tool, workspace, onChange }: WorkspaceProps & { tool: Too
   if (tool === "days-until") return <DaysUntilTool items={workspace.dayCountdowns} onChange={(dayCountdowns) => onChange({ ...workspace, dayCountdowns })} />;
   if (tool === "notes") {
     return <StickyNotesTool notes={workspace.notes} pinned={workspace.pinnedTools.includes("notes")} onChange={(notes) => onChange({ ...workspace, notes })} />;
-  }
-  if (tool === "sounds") {
-    return <AmbientSoundsTool sound={workspace.sound} onChange={(sound) => onChange({ ...workspace, sound })} />;
   }
   if (tool === "case-converter") return <CaseConverterTool />;
   return <DeveloperUtilitiesTool />;

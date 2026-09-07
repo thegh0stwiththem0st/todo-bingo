@@ -23,6 +23,13 @@ export const STORAGE_KEY = "productivity-bingo-state-v9";
 const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v8", "productivity-bingo-state-v7", "productivity-bingo-state-v6", "productivity-bingo-state-v5", "productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
 const patternIds = targetPatterns.map((pattern) => pattern.id);
 
+function removeRetiredWorkspaceTools(state: AppState): AppState {
+  const pinnedTools = state.workspace.pinnedTools.filter((tool) => tool !== "sounds");
+  const activeTool = state.workspace.activeTool === "sounds" ? "pomodoro" : state.workspace.activeTool;
+  if (pinnedTools.length === state.workspace.pinnedTools.length && activeTool === state.workspace.activeTool) return state;
+  return { ...state, workspace: { ...state.workspace, activeTool, pinnedTools } };
+}
+
 export function createInitialState(): AppState {
   return {
     version: 9,
@@ -342,10 +349,10 @@ export function parseStoredState(raw: string | null): AppState | null {
 export function loadState(): AppState {
   if (typeof localStorage === "undefined") return createInitialState();
   const current = migrateState(localStorage.getItem(STORAGE_KEY));
-  if (current) return current;
+  if (current) return removeRetiredWorkspaceTools(current);
   for (const key of LEGACY_STORAGE_KEYS) {
     const migrated = migrateState(localStorage.getItem(key));
-    if (migrated) return migrated;
+    if (migrated) return removeRetiredWorkspaceTools(migrated);
   }
   return createInitialState();
 }
@@ -376,5 +383,5 @@ export function parseBackup(raw: string): AppState {
   }
   const state = migrateState(JSON.stringify(value.data));
   if (!state) throw new Error("The backup is incomplete or contains invalid data.");
-  return state;
+  return removeRetiredWorkspaceTools(state);
 }
