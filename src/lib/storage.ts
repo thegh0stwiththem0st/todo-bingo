@@ -7,6 +7,7 @@ import type {
   BoardSquare,
   BoardState,
   FillerTask,
+  Metric,
   PatternId,
   Reward,
   RewardFiller,
@@ -18,21 +19,24 @@ import { achievementDefinitions, createInitialAchievements, createInitialUnlocks
 import { daubers, themes } from "./cosmetics";
 import { targetPatterns } from "./patterns";
 import { createInitialWorkspace, toolIds } from "./workspace";
+import { resetDueMetrics } from "./metrics";
 
-export const STORAGE_KEY = "productivity-bingo-state-v9";
-const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v8", "productivity-bingo-state-v7", "productivity-bingo-state-v6", "productivity-bingo-state-v5", "productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
+export const STORAGE_KEY = "productivity-bingo-state-v10";
+const LEGACY_STORAGE_KEYS = ["productivity-bingo-state-v9", "productivity-bingo-state-v8", "productivity-bingo-state-v7", "productivity-bingo-state-v6", "productivity-bingo-state-v5", "productivity-bingo-state-v4", "productivity-bingo-state-v3", "productivity-bingo-state-v2", "productivity-bingo-state-v1"];
 const patternIds = targetPatterns.map((pattern) => pattern.id);
 
-function removeRetiredWorkspaceTools(state: AppState): AppState {
+function normalizeState(state: AppState): AppState {
   const pinnedTools = state.workspace.pinnedTools.filter((tool) => tool !== "sounds");
   const activeTool = state.workspace.activeTool === "sounds" ? "pomodoro" : state.workspace.activeTool;
-  if (pinnedTools.length === state.workspace.pinnedTools.length && activeTool === state.workspace.activeTool) return state;
-  return { ...state, workspace: { ...state.workspace, activeTool, pinnedTools } };
+  const fillerTasks = state.fillerTasks.filter((task) => task.id !== "filler-fun-wellness-1" && !/^make a cup of (?:tea or )?coffee$/i.test(task.text.trim()));
+  const metrics = resetDueMetrics(state.workspace.metrics);
+  if (pinnedTools.length === state.workspace.pinnedTools.length && activeTool === state.workspace.activeTool && fillerTasks.length === state.fillerTasks.length && metrics === state.workspace.metrics) return state;
+  return { ...state, fillerTasks, workspace: { ...state.workspace, activeTool, pinnedTools, metrics } };
 }
 
 export function createInitialState(): AppState {
   return {
-    version: 9,
+    version: 10,
     tasks: [],
     rewards: [],
     rewardFillers: defaultRewardFillers.map((reward) => ({ ...reward })),
@@ -121,7 +125,7 @@ function isValidQuest(value: unknown): boolean {
       typeof stage.completedAt === "string" && isValidAwardedReward(stage.awardedReward, true)));
 }
 
-function isValidBoard(value: unknown): value is BoardState | null {
+function isValidBoardV9(value: unknown): boolean {
   if (value === null) return true;
   return isRecord(value) && hasValidBoardCore(value) && hasValidModeFields(value, true, true) &&
     value.squares instanceof Array && value.squares.every(
@@ -130,7 +134,14 @@ function isValidBoard(value: unknown): value is BoardState | null {
     ((value.mode === "quest" && value.quest !== null) || (value.mode !== "quest" && value.quest === null));
 }
 
-function isValidLegacyBoard(value: unknown): value is Omit<BoardState, "quest"> | null {
+function isValidBoard(value: unknown): value is BoardState | null {
+  if (!isValidBoardV9(value)) return false;
+  if (value === null) return true;
+  if (!isRecord(value) || !(value.focusedSquareId === null || typeof value.focusedSquareId === "string")) return false;
+  return value.focusedSquareId === null || (value.squares as unknown[]).some((square) => isRecord(square) && square.id === value.focusedSquareId && square.completed === false);
+}
+
+function isValidLegacyBoard(value: unknown): value is Omit<BoardState, "quest" | "focusedSquareId"> | null {
   if (value === null) return true;
   return isRecord(value) && hasValidBoardCore(value) && hasValidModeFields(value, false, false) &&
     value.squares instanceof Array && value.squares.every(
@@ -215,13 +226,24 @@ function isValidWorkspaceV8(value: unknown): boolean {
     value.dayCountdowns.every((item) => isRecord(item) && typeof item.id === "string" && typeof item.title === "string" && isDateKey(item.targetDate));
 }
 
-function isValidWorkspace(value: unknown): value is AppState["workspace"] {
+function isValidWorkspaceV9(value: unknown): boolean {
   if (!isValidWorkspaceV8(value) || !isRecord(value) || !isRecord(value.floatingTools)) return false;
   return Object.entries(value.floatingTools).every(([tool, position]) =>
     toolIds.includes(tool as (typeof toolIds)[number]) && isRecord(position) &&
     typeof position.x === "number" && Number.isFinite(position.x) &&
     typeof position.y === "number" && Number.isFinite(position.y) &&
     typeof position.z === "number" && Number.isFinite(position.z));
+}
+
+function isValidMetric(value: unknown): value is Metric {
+  return isRecord(value) && typeof value.id === "string" && typeof value.label === "string" &&
+    typeof value.value === "number" && Number.isFinite(value.value) &&
+    (value.resetFrequency === "none" || value.resetFrequency === "daily" || value.resetFrequency === "weekly" || value.resetFrequency === "monthly" || value.resetFrequency === "yearly") &&
+    typeof value.lastResetAt === "string" && typeof value.createdAt === "string";
+}
+
+function isValidWorkspace(value: unknown): value is AppState["workspace"] {
+  return isValidWorkspaceV9(value) && isRecord(value) && Array.isArray(value.metrics) && value.metrics.every(isValidMetric);
 }
 
 function hasValidCollections(value: Record<string, unknown>, requireTier = true, requireTaskKind = true): boolean {
@@ -231,7 +253,7 @@ function hasValidCollections(value: Record<string, unknown>, requireTier = true,
 }
 
 function isValidState(value: unknown): value is AppState {
-  return isRecord(value) && value.version === 9 && hasValidCollections(value) &&
+  return isRecord(value) && value.version === 10 && hasValidCollections(value) &&
     Array.isArray(value.rewardFillers) && value.rewardFillers.every(isValidRewardFiller) &&
     isValidBoard(value.board) && isValidStats(value.stats) && isValidStreak(value.streak) &&
     isValidCosmetics(value, true) && isValidWorkspace(value.workspace);
@@ -257,6 +279,7 @@ function migrateBoard(value: unknown, version: 1 | 2): BoardState | null | undef
       targetCompleted: completedPatterns.length > 0,
       completionRecorded: completedPatterns.length > 0,
       awardedReward: null,
+      focusedSquareId: null,
       quest: null,
     };
   }
@@ -272,6 +295,7 @@ function migrateBoard(value: unknown, version: 1 | 2): BoardState | null | undef
     targetCompleted: value.targetCompleted as boolean,
     completionRecorded: value.targetCompleted as boolean,
     awardedReward: legacyReward ? { ...legacyReward, tier: "medium" } : null,
+    focusedSquareId: null,
     quest: null,
   };
 }
@@ -284,6 +308,7 @@ function migrateLegacyModernBoard(value: unknown): BoardState | null | undefined
     ...value,
     awardedReward: reward ? { ...reward, tier: "medium" } : null,
     quest: null,
+    focusedSquareId: null,
   } as BoardState;
 }
 
@@ -291,12 +316,12 @@ function migrateState(raw: string | null): AppState | null {
   if (!raw) return null;
   try {
     const value: unknown = JSON.parse(raw);
-    if (isValidState(value)) return value;
-    if (!isRecord(value) || ![1, 2, 3, 4, 5, 6, 7, 8].includes(value.version as number)) return null;
-    const version = value.version as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+    if (isValidState(value)) return normalizeState(value);
+    if (!isRecord(value) || ![1, 2, 3, 4, 5, 6, 7, 8, 9].includes(value.version as number)) return null;
+    const version = value.version as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
     if (!hasValidCollections(value, version >= 5, version >= 6)) return null;
     const board = version >= 5
-      ? (isValidBoard(value.board) ? value.board : undefined)
+      ? (isValidBoardV9(value.board) ? (value.board === null ? null : { ...(value.board as Omit<BoardState, "focusedSquareId">), focusedSquareId: null }) : undefined)
       : version >= 3
       ? migrateLegacyModernBoard(value.board)
       : migrateBoard(value.board, version as 1 | 2);
@@ -311,8 +336,8 @@ function migrateState(raw: string | null): AppState | null {
       ...task,
       kind: task.kind ?? "repeatable",
     }));
-    return {
-      version: 9,
+    return normalizeState({
+      version: 10,
       tasks,
       rewards,
       rewardFillers: version >= 8 ? value.rewardFillers as RewardFiller[] : defaultRewardFillers.map((reward) => ({ ...reward })),
@@ -325,12 +350,14 @@ function migrateState(raw: string | null): AppState | null {
         : { selectedTheme: "simple", selectedDauber: "x", seasonalEffects: true, seasonalPreview: null },
       unlocks: version >= 4 ? value.unlocks as AppState["unlocks"] : createInitialUnlocks(),
       achievements: version >= 4 ? value.achievements as AppState["achievements"] : createInitialAchievements(),
-      workspace: version >= 8 && isValidWorkspaceV8(value.workspace)
-        ? { ...(value.workspace as Omit<AppState["workspace"], "floatingTools">), floatingTools: {} }
+      workspace: version >= 9 && isValidWorkspaceV9(value.workspace)
+        ? { ...(value.workspace as Omit<AppState["workspace"], "metrics">), metrics: [] }
+        : version >= 8 && isValidWorkspaceV8(value.workspace)
+        ? { ...(value.workspace as Omit<AppState["workspace"], "floatingTools" | "metrics">), floatingTools: {}, metrics: [] }
         : version >= 7 && isValidLegacyWorkspace(value.workspace)
         ? { ...createInitialWorkspace(), ...(value.workspace as Pick<AppState["workspace"], "drawerOpen" | "activeTool" | "pinnedTools" | "notes" | "pomodoro" | "sound">) }
         : createInitialWorkspace(),
-    };
+    });
   } catch {
     return null;
   }
@@ -349,10 +376,10 @@ export function parseStoredState(raw: string | null): AppState | null {
 export function loadState(): AppState {
   if (typeof localStorage === "undefined") return createInitialState();
   const current = migrateState(localStorage.getItem(STORAGE_KEY));
-  if (current) return removeRetiredWorkspaceTools(current);
+  if (current) return normalizeState(current);
   for (const key of LEGACY_STORAGE_KEYS) {
     const migrated = migrateState(localStorage.getItem(key));
-    if (migrated) return removeRetiredWorkspaceTools(migrated);
+    if (migrated) return normalizeState(migrated);
   }
   return createInitialState();
 }
@@ -362,7 +389,7 @@ export function saveState(state: AppState): void {
 }
 
 export function createBackup(state: AppState, exportedAt = new Date().toISOString()): BackupFile {
-  return { app: "productivity-bingo", schemaVersion: 9, exportedAt, data: state };
+  return { app: "productivity-bingo", schemaVersion: 10, exportedAt, data: state };
 }
 
 export function parseBackup(raw: string): AppState {
@@ -375,7 +402,7 @@ export function parseBackup(raw: string): AppState {
   if (!isRecord(value) || value.app !== "productivity-bingo") {
     throw new Error("That file is not a Productivity Bingo backup.");
   }
-  if (value.schemaVersion !== 3 && value.schemaVersion !== 4 && value.schemaVersion !== 5 && value.schemaVersion !== 6 && value.schemaVersion !== 7 && value.schemaVersion !== 8 && value.schemaVersion !== 9) {
+  if (value.schemaVersion !== 3 && value.schemaVersion !== 4 && value.schemaVersion !== 5 && value.schemaVersion !== 6 && value.schemaVersion !== 7 && value.schemaVersion !== 8 && value.schemaVersion !== 9 && value.schemaVersion !== 10) {
     throw new Error("This backup uses an unsupported schema version.");
   }
   if (typeof value.exportedAt !== "string") {
@@ -383,5 +410,5 @@ export function parseBackup(raw: string): AppState {
   }
   const state = migrateState(JSON.stringify(value.data));
   if (!state) throw new Error("The backup is incomplete or contains invalid data.");
-  return removeRetiredWorkspaceTools(state);
+  return normalizeState(state);
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultFillerTasks } from "../data/fillerTasks";
 import type { UserTask } from "../types";
-import { generateBoard } from "./board";
+import { focusAfterSquareToggle, generateBoard, setFocusedSquare } from "./board";
 
 function task(index: number): UserTask {
   return { id: `task-${index}`, text: `Task ${index}`, kind: "repeatable", active: true, createdAt: "2026-01-01" };
@@ -40,6 +40,23 @@ describe("generateBoard", () => {
     expect(board.completionRecorded).toBe(false);
     expect(board.awardedReward).toBeNull();
     expect(board.squares.every((square) => !square.countedComplete)).toBe(true);
+    expect(board.focusedSquareId).toBeNull();
+  });
+
+  it("focuses, switches, and unfocuses one square at a time", () => {
+    const board = generateBoard([], defaultFillerTasks, undefined, () => 0.5);
+    const first = setFocusedSquare(board, board.squares[0].id);
+    expect(first.focusedSquareId).toBe(board.squares[0].id);
+    const second = setFocusedSquare(first, board.squares[1].id);
+    expect(second.focusedSquareId).toBe(board.squares[1].id);
+    expect(setFocusedSquare(second, board.squares[1].id).focusedSquareId).toBeNull();
+  });
+
+  it("clears focus when that square is completed", () => {
+    const board = generateBoard([], defaultFillerTasks, undefined, () => 0.5);
+    const focused = setFocusedSquare(board, board.squares[0].id);
+    expect(focusAfterSquareToggle(focused, board.squares[0].id, true)).toBeNull();
+    expect(focusAfterSquareToggle(focused, board.squares[0].id, false)).toBe(board.squares[0].id);
   });
 
   it("initializes quest state only in quest mode", () => {

@@ -7,6 +7,7 @@ import { CountdownTimerTool } from "./CountdownTimerTool";
 import { TimeZoneTool } from "./TimeZoneTool";
 import { DaysUntilTool } from "./DaysUntilTool";
 import { CaseConverterTool } from "./CaseConverterTool";
+import { MetricsTool } from "./MetricsTool";
 import type { ToolId, WorkspaceState } from "../types";
 
 type WorkspaceProps = {
@@ -20,6 +21,7 @@ const tools: Array<{ id: ToolId; label: string; icon: string; description: strin
   { id: "timer", label: "Countdown timer", icon: "⌛", description: "A flexible hours, minutes, seconds timer" },
   { id: "time-zones", label: "Time zones", icon: "◎", description: "World clocks and time comparison" },
   { id: "days-until", label: "Days until", icon: "▦", description: "Count down to important dates" },
+  { id: "metrics", label: "Metrics", icon: "±", description: "Track values that grow or shrink" },
   { id: "notes", label: "Sticky notes", icon: "▤", description: "Quick notes saved in this browser" },
   { id: "case-converter", label: "Case converter", icon: "Aa", description: "Convert text between common cases" },
   { id: "developer", label: "Developer utilities", icon: "{ }", description: "Format JSON, XML, SQL, and lists" },
@@ -33,6 +35,7 @@ function ToolContent({ tool, workspace, onChange }: WorkspaceProps & { tool: Too
   if (tool === "timer") return <CountdownTimerTool timer={workspace.timer} onChange={(timer) => onChange({ ...workspace, timer })} />;
   if (tool === "time-zones") return <TimeZoneTool timeZones={workspace.timeZones} timeZoneSource={workspace.timeZoneSource} comparisonDate={workspace.comparisonDate} comparisonTime={workspace.comparisonTime} onChange={(patch) => onChange({ ...workspace, ...patch })} />;
   if (tool === "days-until") return <DaysUntilTool items={workspace.dayCountdowns} onChange={(dayCountdowns) => onChange({ ...workspace, dayCountdowns })} />;
+  if (tool === "metrics") return <MetricsTool metrics={workspace.metrics} onChange={(metrics) => onChange({ ...workspace, metrics })} />;
   if (tool === "notes") {
     return <StickyNotesTool notes={workspace.notes} pinned={workspace.pinnedTools.includes("notes")} onChange={(notes) => onChange({ ...workspace, notes })} />;
   }

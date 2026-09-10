@@ -1,6 +1,8 @@
 import type { FillerTask } from "../types";
 
-const fillerGroups: Record<string, string[]> = {
+type FillerSeed = string | { text: string; legacyIndex: number };
+
+const fillerGroups: Record<string, FillerSeed[]> = {
   "Movement / Reset": [
     "Drink a glass of water",
     "Stretch for 1 minute",
@@ -30,17 +32,16 @@ const fillerGroups: Record<string, string[]> = {
   ],
   "Fun / Wellness": [
     "Play one favorite song",
-    "Make a cup of tea or coffee",
-    "Look away from the screen and stretch your shoulders",
-    "Give yourself credit for one thing you've already finished today",
+    { text: "Look away from the screen and stretch your shoulders", legacyIndex: 2 },
+    { text: "Give yourself credit for one thing you've already finished today", legacyIndex: 3 },
   ],
 };
 
 export const defaultFillerTasks: FillerTask[] = Object.entries(fillerGroups).flatMap(
   ([category, tasks]) =>
-    tasks.map((text, index) => ({
-      id: `filler-${category.toLowerCase().replace(/[^a-z]+/g, "-")}-${index}`,
-      text,
+    tasks.map((seed, index) => ({
+      id: `filler-${category.toLowerCase().replace(/[^a-z]+/g, "-")}-${typeof seed === "string" ? index : seed.legacyIndex}`,
+      text: typeof seed === "string" ? seed : seed.text,
       enabled: true,
       builtIn: true,
       category,

@@ -10,6 +10,15 @@ export function shuffle<T>(values: readonly T[], random: () => number = Math.ran
   return result;
 }
 
+export function setFocusedSquare(board: BoardState, squareId: string): BoardState {
+  if (!board.squares.some((square) => square.id === squareId && !square.completed)) return board;
+  return { ...board, focusedSquareId: board.focusedSquareId === squareId ? null : squareId };
+}
+
+export function focusAfterSquareToggle(board: BoardState, squareId: string, willBeCompleted: boolean) {
+  return willBeCompleted && board.focusedSquareId === squareId ? null : board.focusedSquareId;
+}
+
 export function generateBoard(
   tasks: UserTask[],
   fillerTasks: FillerTask[],
@@ -59,6 +68,7 @@ export function generateBoard(
     id: createId("board"),
     createdAt: new Date().toISOString(),
     squares: shuffle([...userSquares, ...fillerSquares], random),
+    focusedSquareId: null,
     mode: options.mode,
     targetPattern: options.targetPattern,
     completedPatterns: [],

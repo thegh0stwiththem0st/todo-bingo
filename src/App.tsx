@@ -9,7 +9,7 @@ import { ModeSelector } from "./components/ModeSelector";
 import { RewardManager } from "./components/RewardManager";
 import { TaskManager } from "./components/TaskManager";
 import { FloatingTools, ToolDrawer } from "./components/Workspace";
-import { generateBoard } from "./lib/board";
+import { focusAfterSquareToggle, generateBoard, setFocusedSquare } from "./lib/board";
 import { defaultRewardFillers } from "./data/rewardFillers";
 import { evaluateAchievements, type AchievementDefinition } from "./lib/achievements";
 import { createId } from "./lib/id";
@@ -203,6 +203,7 @@ export default function App() {
         board: {
           ...current.board,
           squares,
+          focusedSquareId: focusAfterSquareToggle(current.board, toggledSquare.id, !toggledSquare.completed),
           completedPatterns,
           targetCompleted,
           completionRecorded: current.board.completionRecorded || firstBoardCompletion,
@@ -210,6 +211,13 @@ export default function App() {
           quest,
         },
       };
+    });
+  }
+
+  function focusSquare(index: number) {
+    setState((current) => {
+      if (!current.board) return current;
+      return { ...current, board: setFocusedSquare(current.board, current.board.squares[index].id) };
     });
   }
 
@@ -315,6 +323,7 @@ export default function App() {
           <BingoBoard
             board={state.board}
             onToggleSquare={toggleSquare}
+            onFocusSquare={focusSquare}
             dauber={state.settings.selectedDauber}
           />
         </section>

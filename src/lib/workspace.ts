@@ -1,6 +1,6 @@
 import type { HolidayId, WorkspaceState } from "../types";
 
-export const toolIds = ["pomodoro", "stopwatch", "timer", "time-zones", "days-until", "notes", "case-converter", "sounds", "developer"] as const;
+export const toolIds = ["pomodoro", "stopwatch", "timer", "time-zones", "days-until", "metrics", "notes", "case-converter", "sounds", "developer"] as const;
 
 export function createInitialWorkspace(): WorkspaceState {
   return {
@@ -28,6 +28,7 @@ export function createInitialWorkspace(): WorkspaceState {
     comparisonDate: new Date().toISOString().slice(0, 10),
     comparisonTime: "15:00",
     dayCountdowns: [],
+    metrics: [],
     sound: { selected: "rain", volume: 35 },
   };
 }

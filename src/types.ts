@@ -74,6 +74,7 @@ export type BoardState = {
   id: string;
   createdAt: string;
   squares: BoardSquare[];
+  focusedSquareId: string | null;
   mode: BingoMode;
   targetPattern: PatternId;
   completedPatterns: string[];
@@ -127,7 +128,7 @@ export type AppearanceSettings = {
   seasonalPreview: HolidayId | null;
 };
 
-export type ToolId = "pomodoro" | "stopwatch" | "timer" | "time-zones" | "days-until" | "notes" | "case-converter" | "sounds" | "developer";
+export type ToolId = "pomodoro" | "stopwatch" | "timer" | "time-zones" | "days-until" | "metrics" | "notes" | "case-converter" | "sounds" | "developer";
 export type PomodoroPhase = "focus" | "break";
 export type AmbientSoundId = "rain" | "cafe" | "fireplace";
 export type HolidayId = "new-year" | "valentine" | "pride" | "halloween" | "winter";
@@ -177,6 +178,17 @@ export type PomodoroState = {
   isRunning: boolean;
 };
 
+export type MetricResetFrequency = "none" | "daily" | "weekly" | "monthly" | "yearly";
+
+export type Metric = {
+  id: string;
+  label: string;
+  value: number;
+  resetFrequency: MetricResetFrequency;
+  lastResetAt: string;
+  createdAt: string;
+};
+
 export type WorkspaceState = {
   drawerOpen: boolean;
   activeTool: ToolId;
@@ -191,6 +203,7 @@ export type WorkspaceState = {
   comparisonDate: string;
   comparisonTime: string;
   dayCountdowns: DayCountdown[];
+  metrics: Metric[];
   sound: {
     selected: AmbientSoundId;
     volume: number;
@@ -198,7 +211,7 @@ export type WorkspaceState = {
 };
 
 export type AppState = {
-  version: 9;
+  version: 10;
   tasks: UserTask[];
   rewards: Reward[];
   rewardFillers: RewardFiller[];
@@ -214,7 +227,7 @@ export type AppState = {
 
 export type BackupFile = {
   app: "productivity-bingo";
-  schemaVersion: 9;
+  schemaVersion: 10;
   exportedAt: string;
   data: AppState;
 };
